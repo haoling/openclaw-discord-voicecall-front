@@ -27,7 +27,7 @@ client.once("ready", async () => {
       throw new Error(`Channel not found: ${DISCORD_LOG_CHANNEL_ID}`);
     }
 
-    if (!channel.isTextBased()) {
+    if (!(channel instanceof TextChannel)) {
       throw new Error(`Channel is not a text channel: ${DISCORD_LOG_CHANNEL_ID}`);
     }
 
