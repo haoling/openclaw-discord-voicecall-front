@@ -55,4 +55,7 @@ client.once("ready", async () => {
   }
 });
 
-client.login(DISCORD_BOT_TOKEN);
+client.login(DISCORD_BOT_TOKEN).catch((error) => {
+  console.error("Failed to log in:", error);
+  process.exit(1);
+});
