@@ -82,23 +82,30 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
     const timestamp = getJapaneseTimestamp();
 
+    // イベントタイプに基づいてメッセージ内容を決定
+    let message: string | null = null;
+    let consoleLog: string | null = null;
+
     // ボイスチャンネルに参加した場合
     if (!oldState.channel && newState.channel) {
-      const message = `🔊 **ボイスチャンネル参加** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${newState.channel.name}`;
-      await cachedLogChannel.send(message);
-      console.log(`${member.user.tag} joined ${newState.channel.name}`);
+      message = `🔊 **ボイスチャンネル参加** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${newState.channel.name}`;
+      consoleLog = `${member.user.tag} joined ${newState.channel.name}`;
     }
     // ボイスチャンネルから退出した場合
     else if (oldState.channel && !newState.channel) {
-      const message = `🔇 **ボイスチャンネル退出** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${oldState.channel.name}`;
-      await cachedLogChannel.send(message);
-      console.log(`${member.user.tag} left ${oldState.channel.name}`);
+      message = `🔇 **ボイスチャンネル退出** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${oldState.channel.name}`;
+      consoleLog = `${member.user.tag} left ${oldState.channel.name}`;
     }
     // ボイスチャンネル間を移動した場合
     else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
-      const message = `🔀 **ボイスチャンネル移動** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📤 **移動元:** ${oldState.channel.name}\n📥 **移動先:** ${newState.channel.name}`;
+      message = `🔀 **ボイスチャンネル移動** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📤 **移動元:** ${oldState.channel.name}\n📥 **移動先:** ${newState.channel.name}`;
+      consoleLog = `${member.user.tag} moved from ${oldState.channel.name} to ${newState.channel.name}`;
+    }
+
+    // メッセージがある場合のみ送信とログ出力
+    if (message && consoleLog) {
       await cachedLogChannel.send(message);
-      console.log(`${member.user.tag} moved from ${oldState.channel.name} to ${newState.channel.name}`);
+      console.log(consoleLog);
     }
   } catch (error) {
     console.error("Error in voiceStateUpdate handler:", error);
