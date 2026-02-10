@@ -14,7 +14,10 @@ if (!DISCORD_LOG_CHANNEL_ID) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates, // ボイスチャンネルの状態変更を監視するために必要
+  ],
 });
 
 client.once("ready", async () => {
@@ -46,12 +49,57 @@ client.once("ready", async () => {
 
     await channel.send(message);
     console.log(`Message sent to #${channel.name}`);
+    console.log("Voice state monitoring started.");
   } catch (error) {
     console.error("An error occurred during startup:", error);
     process.exitCode = 1;
-  } finally {
-    client.destroy();
-    console.log("Bot disconnected. Done.");
+  }
+});
+
+// ボイスチャンネルの入退室を監視
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  try {
+    const logChannel = await client.channels.fetch(DISCORD_LOG_CHANNEL_ID);
+
+    if (!logChannel || !(logChannel instanceof TextChannel)) {
+      console.error("Log channel not found or is not a text channel");
+      return;
+    }
+
+    const member = newState.member || oldState.member;
+    if (!member) return;
+
+    const now = new Date();
+    const timestamp = now.toLocaleString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    // ボイスチャンネルに参加した場合
+    if (!oldState.channel && newState.channel) {
+      const message = `🔊 **ボイスチャンネル参加** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${newState.channel.name}`;
+      await logChannel.send(message);
+      console.log(`${member.user.tag} joined ${newState.channel.name}`);
+    }
+    // ボイスチャンネルから退出した場合
+    else if (oldState.channel && !newState.channel) {
+      const message = `🔇 **ボイスチャンネル退出** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${oldState.channel.name}`;
+      await logChannel.send(message);
+      console.log(`${member.user.tag} left ${oldState.channel.name}`);
+    }
+    // ボイスチャンネル間を移動した場合
+    else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
+      const message = `🔀 **ボイスチャンネル移動** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📤 **移動元:** ${oldState.channel.name}\n📥 **移動先:** ${newState.channel.name}`;
+      await logChannel.send(message);
+      console.log(`${member.user.tag} moved from ${oldState.channel.name} to ${newState.channel.name}`);
+    }
+  } catch (error) {
+    console.error("Error in voiceStateUpdate handler:", error);
   }
 });
 
