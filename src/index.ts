@@ -20,6 +20,9 @@ const client = new Client({
   ],
 });
 
+// ログチャンネルをキャッシュ（起動時に一度だけフェッチ）
+let cachedLogChannel: TextChannel | null = null;
+
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}`);
 
@@ -33,6 +36,9 @@ client.once("ready", async () => {
     if (!(channel instanceof TextChannel)) {
       throw new Error(`Channel is not a text channel: ${DISCORD_LOG_CHANNEL_ID}`);
     }
+
+    // ログチャンネルをキャッシュに保存
+    cachedLogChannel = channel;
 
     const now = new Date();
     const timestamp = now.toLocaleString("ja-JP", {
@@ -59,10 +65,9 @@ client.once("ready", async () => {
 // ボイスチャンネルの入退室を監視
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
-    const logChannel = await client.channels.fetch(DISCORD_LOG_CHANNEL_ID);
-
-    if (!logChannel || !(logChannel instanceof TextChannel)) {
-      console.error("Log channel not found or is not a text channel");
+    // キャッシュされたログチャンネルを使用（毎回フェッチしない）
+    if (!cachedLogChannel) {
+      console.error("Log channel not cached yet");
       return;
     }
 
@@ -83,19 +88,19 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     // ボイスチャンネルに参加した場合
     if (!oldState.channel && newState.channel) {
       const message = `🔊 **ボイスチャンネル参加** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${newState.channel.name}`;
-      await logChannel.send(message);
+      await cachedLogChannel.send(message);
       console.log(`${member.user.tag} joined ${newState.channel.name}`);
     }
     // ボイスチャンネルから退出した場合
     else if (oldState.channel && !newState.channel) {
       const message = `🔇 **ボイスチャンネル退出** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${oldState.channel.name}`;
-      await logChannel.send(message);
+      await cachedLogChannel.send(message);
       console.log(`${member.user.tag} left ${oldState.channel.name}`);
     }
     // ボイスチャンネル間を移動した場合
     else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
       const message = `🔀 **ボイスチャンネル移動** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📤 **移動元:** ${oldState.channel.name}\n📥 **移動先:** ${newState.channel.name}`;
-      await logChannel.send(message);
+      await cachedLogChannel.send(message);
       console.log(`${member.user.tag} moved from ${oldState.channel.name} to ${newState.channel.name}`);
     }
   } catch (error) {
