@@ -23,6 +23,22 @@ const client = new Client({
 // ログチャンネルをキャッシュ（起動時に一度だけフェッチ）
 let cachedLogChannel: TextChannel | null = null;
 
+/**
+ * 日本時間のタイムスタンプを生成するヘルパー関数
+ */
+function getJapaneseTimestamp(): string {
+  const now = new Date();
+  return now.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}`);
 
@@ -40,17 +56,7 @@ client.once("ready", async () => {
     // ログチャンネルをキャッシュに保存
     cachedLogChannel = channel;
 
-    const now = new Date();
-    const timestamp = now.toLocaleString("ja-JP", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-
+    const timestamp = getJapaneseTimestamp();
     const message = `🤖 Bot起動確認 — ${timestamp}\nDiscord Voice Bot が正常に起動しました。`;
 
     await channel.send(message);
@@ -74,16 +80,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
     if (!member) return;
 
-    const now = new Date();
-    const timestamp = now.toLocaleString("ja-JP", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    const timestamp = getJapaneseTimestamp();
 
     // ボイスチャンネルに参加した場合
     if (!oldState.channel && newState.channel) {
