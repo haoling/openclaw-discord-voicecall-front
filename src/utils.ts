@@ -1,4 +1,4 @@
-import { getCachedLogChannel, getVoiceConnection } from "./state";
+import { getCachedLogChannel, getVoiceConnection, getActiveThread } from "./state";
 import { config } from "./config";
 import {
   createAudioPlayer,
@@ -305,7 +305,9 @@ async function sendChatCompletionRequest(
       if (cachedLogChannel) {
         const timestamp = getJapaneseTimestamp();
         const timeoutMessage = `⚠️ **LLMタイムアウト** — ${timestamp}\nLLMからの応答が60秒以内に得られませんでした。`;
-        cachedLogChannel
+        const activeThread = getActiveThread();
+        const targetChannel = activeThread || cachedLogChannel;
+        targetChannel
           .send(timeoutMessage)
           .catch((sendError) =>
             console.error(
@@ -336,7 +338,9 @@ export async function sendTranscriptionToChannel(
   try {
     const timestamp = getJapaneseTimestamp();
     const message = `💬 **${username}** — ${timestamp}\n${transcript}`;
-    await cachedLogChannel.send(message);
+    const activeThread = getActiveThread();
+    const targetChannel = activeThread || cachedLogChannel;
+    await targetChannel.send(message);
     console.log(`[Transcription] ${username}: ${transcript}`);
 
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
@@ -353,8 +357,10 @@ export async function sendTranscriptionToChannel(
           const llmTimestamp = getJapaneseTimestamp();
           const llmMessage = `🤖 **LLM応答** — ${llmTimestamp}\n${llmResponse}`;
 
-          // ログチャンネルに投稿（これは待機する）
-          await cachedLogChannel.send(llmMessage);
+          // ログチャンネルまたはアクティブなスレッドに投稿（これは待機する）
+          const activeThread = getActiveThread();
+          const targetChannel = activeThread || cachedLogChannel;
+          await targetChannel.send(llmMessage);
 
           // TTS音声再生は非同期で実行（待機しない）
           (async () => {
@@ -376,7 +382,9 @@ export async function sendTranscriptionToChannel(
         try {
           const timestamp = getJapaneseTimestamp();
           const errorMessage = `❌ **LLMエラー** — ${timestamp}\nLLM処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`;
-          await cachedLogChannel.send(errorMessage);
+          const activeThread = getActiveThread();
+          const targetChannel = activeThread || cachedLogChannel;
+          await targetChannel.send(errorMessage);
         } catch (sendError) {
           console.error(
             "[LLM] Failed to send error message to channel:",

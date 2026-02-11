@@ -6,7 +6,7 @@ import {
   type DiscordGatewayAdapterCreator,
 } from "@discordjs/voice";
 import { config } from "./config";
-import { client, userStates, getCachedLogChannel, setVoiceConnection } from "./state";
+import { client, userStates, getCachedLogChannel, setVoiceConnection, getActiveThread } from "./state";
 import { getJapaneseTimestamp } from "./utils";
 import { listenToUser, cleanupUserState } from "./audio";
 
@@ -123,7 +123,9 @@ export async function connectToVoiceChannel() {
 
     const cachedLogChannel = getCachedLogChannel();
     if (cachedLogChannel) {
-      await cachedLogChannel.send(
+      const activeThread = getActiveThread();
+      const targetChannel = activeThread || cachedLogChannel;
+      await targetChannel.send(
         `🎙️ ボイスチャンネル接続 — ${getJapaneseTimestamp()}\nボットがボイスチャンネルに接続し、音声認識を開始しました。`
       );
     }
