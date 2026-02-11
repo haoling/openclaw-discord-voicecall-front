@@ -37,11 +37,10 @@ export function listenToUser(userId: string, username: string, audioStream: impo
   console.log(`[Audio] Started listening to ${username}`);
 
   // ユーザーの状態を初期化
-  const deepgramStream = createDeepgramStream(userId, username);
   const state: UserTranscriptionState = {
     userId,
     username,
-    deepgramStream,
+    deepgramStream: createDeepgramStream(userId, username),
     lastAudioTime: Date.now(),
     silenceTimer: null,
     currentTranscript: "",
@@ -55,6 +54,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     silenceStartTime: null,
     isSendingToDeepgram: false,
     audioBuffer: [],
+    lastKeepAliveTime: Date.now(),
   };
   userStates.set(userId, state);
 
@@ -186,7 +186,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
 
           // バッファの内容を先に送信（発話の立ち上がり部分を含める）
           try {
-            const readyState = deepgramStream.getReadyState();
+            const readyState = state.deepgramStream.getReadyState();
             if (readyState === 1) {
               if (config.VERBOSE) {
                 console.log(
@@ -194,7 +194,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
                 );
               }
               for (const bufferedData of state.audioBuffer) {
-                deepgramStream.send(bufferedData);
+                state.deepgramStream.send(bufferedData);
               }
               state.audioBuffer = []; // バッファをクリア
             }
@@ -209,9 +209,10 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         // speech_final: true が返ってくるまで送信し続ける
         if (state.isSendingToDeepgram) {
           try {
-            const readyState = deepgramStream.getReadyState();
+            const readyState = state.deepgramStream.getReadyState();
             if (readyState === 1) {
-              deepgramStream.send(pcmData);
+              state.deepgramStream.send(pcmData);
+              state.lastKeepAliveTime = Date.now(); // キープアライブタイムスタンプを更新
               if (config.VERBOSE && state.totalSamples % 10 === 0) {
                 console.log(
                   `[VERBOSE] ${username} | Deepgramへ送信中 (ReadyState: ${readyState}, サンプルサイズ: ${pcmData.length}バイト)`
@@ -270,9 +271,10 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           } else if (state.isSendingToDeepgram) {
             // まだ無音時間が足りない → 送信継続
             try {
-              const readyState = deepgramStream.getReadyState();
+              const readyState = state.deepgramStream.getReadyState();
               if (readyState === 1) {
-                deepgramStream.send(pcmData);
+                state.deepgramStream.send(pcmData);
+                state.lastKeepAliveTime = Date.now(); // キープアライブタイムスタンプを更新
                 if (config.VERBOSE && state.totalSamples % 10 === 0) {
                   console.log(
                     `[VERBOSE] ${username} | 無音中だがDeepgramへ送信継続 (無音: ${silenceDuration}ms)`
@@ -282,6 +284,30 @@ export function listenToUser(userId: string, username: string, audioStream: impo
             } catch (error) {
               console.error(
                 `[Deepgram] Error sending data for ${username}:`,
+                error
+              );
+            }
+          }
+        } else {
+          // 発話していない無音時のキープアライブ
+          const timeSinceLastKeepAlive = Date.now() - state.lastKeepAliveTime;
+          if (timeSinceLastKeepAlive > 5000) {
+            // 5秒ごとにキープアライブを送信
+            try {
+              const readyState = state.deepgramStream.getReadyState();
+              if (readyState === 1) {
+                // KeepAliveメッセージを送信（空のJSON）
+                state.deepgramStream.send(JSON.stringify({ type: "KeepAlive" }));
+                state.lastKeepAliveTime = Date.now();
+                if (config.VERBOSE) {
+                  console.log(
+                    `[VERBOSE] ${username} | キープアライブ送信 (最終送信から${timeSinceLastKeepAlive}ms経過)`
+                  );
+                }
+              }
+            } catch (error) {
+              console.error(
+                `[Deepgram] Error sending keepalive for ${username}:`,
                 error
               );
             }
@@ -303,9 +329,10 @@ export function listenToUser(userId: string, username: string, audioStream: impo
 
         // Deepgramに音声データを送信
         try {
-          const readyState = deepgramStream.getReadyState();
+          const readyState = state.deepgramStream.getReadyState();
           if (readyState === 1) {
-            deepgramStream.send(pcmData);
+            state.deepgramStream.send(pcmData);
+            state.lastKeepAliveTime = Date.now(); // キープアライブタイムスタンプを更新
             if (config.VERBOSE) {
               // 10サンプルに1回だけログ出力（ログの洪水を避ける）
               if (state.totalSamples % 10 === 0) {
@@ -343,6 +370,32 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           if (timeSinceLastAudio > 500) {
             // 500ms以上無音
             console.log(`[VERBOSE] ${username} | 無音期間: ${timeSinceLastAudio}ms`);
+          }
+        }
+
+        // ローカルVAD無効時のキープアライブ
+        if (!config.ENABLE_LOCAL_VAD) {
+          const timeSinceLastKeepAlive = Date.now() - state.lastKeepAliveTime;
+          if (timeSinceLastKeepAlive > 5000) {
+            // 5秒ごとにキープアライブを送信
+            try {
+              const readyState = state.deepgramStream.getReadyState();
+              if (readyState === 1) {
+                // KeepAliveメッセージを送信（空のJSON）
+                state.deepgramStream.send(JSON.stringify({ type: "KeepAlive" }));
+                state.lastKeepAliveTime = Date.now();
+                if (config.VERBOSE) {
+                  console.log(
+                    `[VERBOSE] ${username} | キープアライブ送信 (最終送信から${timeSinceLastKeepAlive}ms経過)`
+                  );
+                }
+              }
+            } catch (error) {
+              console.error(
+                `[Deepgram] Error sending keepalive for ${username}:`,
+                error
+              );
+            }
           }
         }
       }

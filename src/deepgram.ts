@@ -46,6 +46,7 @@ export function createDeepgramStream(userId: string, username: string) {
     const state = userStates.get(userId);
     if (state) {
       state.reconnectAttempts = 0;
+      state.lastKeepAliveTime = Date.now(); // キープアライブタイムスタンプを更新
     }
 
     // Openイベント内でTranscript, Error, Closeイベントを登録
