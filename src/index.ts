@@ -6,15 +6,14 @@ import {
   entersState,
   type VoiceConnection,
 } from "@discordjs/voice";
-import { createListenStream } from "@deepgram/sdk";
 import { pipeline } from "stream";
 import * as prism from "prism-media";
 
 // 環境変数の読み込み
-const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID;
-const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID;
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
+const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID!;
+const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
