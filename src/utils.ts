@@ -34,14 +34,23 @@ async function sendChatCompletionRequest(
   }
 
   try {
+    // VERBOSEモードの場合、セッションキーをログ出力
+    if (config.VERBOSE) {
+      console.log(
+        `[LLM] Sending request with session key: ${config.CHAT_COMPLETION_SESSION_KEY}`
+      );
+      console.log(`[LLM] Using model: ${config.CHAT_COMPLETION_MODEL}`);
+    }
+
     const response = await fetch(config.CHAT_COMPLETION_ENDPOINT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.CHAT_COMPLETION_APIKEY}`,
+        "x-openclaw-session-key": config.CHAT_COMPLETION_SESSION_KEY,
       },
       body: JSON.stringify({
-        model: "gpt-4", // デフォルトのモデル名（エンドポイント側で無視される可能性あり）
+        model: config.CHAT_COMPLETION_MODEL,
         messages: [
           {
             role: "user",

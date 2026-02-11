@@ -5,6 +5,8 @@ const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const CHAT_COMPLETION_ENDPOINT_URL = process.env.CHAT_COMPLETION_ENDPOINT_URL || "";
 const CHAT_COMPLETION_APIKEY = process.env.CHAT_COMPLETION_APIKEY || "";
+const CHAT_COMPLETION_MODEL = process.env.CHAT_COMPLETION_MODEL || "gpt-4"; // LLMモデル名（環境変数で設定可能、デフォルト: gpt-4）
+const CHAT_COMPLETION_SESSION_KEY = process.env.CHAT_COMPLETION_SESSION_KEY || "fixed-session-key-placeholder"; // セッションキー（固定値、後で変更可能）
 const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
@@ -55,6 +57,12 @@ console.log(
 console.log(
   `CHAT_COMPLETION_APIKEY: ${CHAT_COMPLETION_APIKEY ? `${CHAT_COMPLETION_APIKEY.substring(0, 8)}...` : "未設定"}`
 );
+console.log(
+  `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL ? CHAT_COMPLETION_MODEL : "未設定"}`
+);
+console.log(
+  `CHAT_COMPLETION_SESSION_KEY: ${CHAT_COMPLETION_SESSION_KEY ? CHAT_COMPLETION_SESSION_KEY : "未設定"}`
+);
 console.log("====================");
 
 export const config = {
@@ -64,6 +72,8 @@ export const config = {
   DEEPGRAM_API_KEY,
   CHAT_COMPLETION_ENDPOINT_URL,
   CHAT_COMPLETION_APIKEY,
+  CHAT_COMPLETION_MODEL,
+  CHAT_COMPLETION_SESSION_KEY,
   VERBOSE,
   ENABLE_DEEPGRAM_VAD,
   ENABLE_LOCAL_VAD,
