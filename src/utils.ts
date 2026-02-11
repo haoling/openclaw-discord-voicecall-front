@@ -33,6 +33,10 @@ async function sendChatCompletionRequest(
     return null;
   }
 
+  // タイムアウト設定（60秒）
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+
   try {
     // VERBOSEモードの場合、セッションキーをログ出力
     if (config.VERBOSE) {
@@ -58,6 +62,7 @@ async function sendChatCompletionRequest(
           },
         ],
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -83,8 +88,28 @@ async function sendChatCompletionRequest(
 
     return llmResponse;
   } catch (error) {
-    console.error("[LLM] Error sending chat completion request:", error);
+    // タイムアウトエラーの場合、ログチャンネルに記録
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[LLM] Request timed out after 60 seconds");
+      const cachedLogChannel = getCachedLogChannel();
+      if (cachedLogChannel) {
+        const timestamp = getJapaneseTimestamp();
+        const timeoutMessage = `⚠️ **LLMタイムアウト** — ${timestamp}\nLLMからの応答が60秒以内に得られませんでした。`;
+        cachedLogChannel
+          .send(timeoutMessage)
+          .catch((sendError) =>
+            console.error(
+              "[LLM] Failed to send timeout message to channel:",
+              sendError
+            )
+          );
+      }
+    } else {
+      console.error("[LLM] Error sending chat completion request:", error);
+    }
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
