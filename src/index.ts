@@ -449,6 +449,20 @@ function listenToUser(userId: string, username: string, audioStream: any) {
           // 新しい発話開始、Deepgramへの送信を開始
           state.isSendingToDeepgram = true;
 
+          // 前の発話の未送信テキストがある場合、先に送信
+          if (state.currentTranscript.trim()) {
+            if (VERBOSE) {
+              console.log(
+                `[VERBOSE] ${username} | 未送信のテキストを先に送信: "${state.currentTranscript.trim()}"`
+              );
+            }
+            sendTranscriptionToChannel(
+              state.username,
+              state.currentTranscript.trim()
+            );
+          }
+          state.currentTranscript = ""; // 新しい発話用にクリア
+
           // バッファの内容を先に送信（発話の立ち上がり部分を含める）
           try {
             const readyState = deepgramStream.getReadyState();
