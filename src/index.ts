@@ -5,6 +5,7 @@ import {
   VoiceConnectionStatus,
   entersState,
   type VoiceConnection,
+  type DiscordGatewayAdapterCreator,
 } from "@discordjs/voice";
 import { pipeline } from "stream";
 import * as prism from "prism-media";
@@ -75,7 +76,7 @@ let voiceConnection: VoiceConnection | null = null;
 interface UserTranscriptionState {
   userId: string;
   username: string;
-  deepgramStream: LiveTranscriptionConnection;
+  deepgramStream: any; // Deepgram SDKの型定義が複雑なため、anyを使用
   lastAudioTime: number;
   silenceTimer: NodeJS.Timeout | null;
   currentTranscript: string;
@@ -679,7 +680,7 @@ async function connectToVoiceChannel() {
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator as InternalDiscordGatewayAdapterCreator,
+      adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
       selfMute: true,
     });
