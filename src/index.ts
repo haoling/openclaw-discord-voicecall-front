@@ -75,7 +75,7 @@ let voiceConnection: VoiceConnection | null = null;
 interface UserTranscriptionState {
   userId: string;
   username: string;
-  deepgramStream: any;
+  deepgramStream: LiveTranscriptionConnection;
   lastAudioTime: number;
   silenceTimer: NodeJS.Timeout | null;
   currentTranscript: string;
