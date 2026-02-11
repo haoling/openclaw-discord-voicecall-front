@@ -107,6 +107,16 @@ export function listenToUser(userId: string, username: string, audioStream: impo
 
   // 最初のデータ受信をログ出力
   let firstDataReceived = false;
+  let audioStreamDataCount = 0;
+  let opusDecoderDataCount = 0;
+
+  // audioStreamのデータ受信をモニタリング（デバッグ用）
+  audioStream.on("data", (chunk: Buffer) => {
+    audioStreamDataCount++;
+    if (config.VERBOSE && audioStreamDataCount <= 5) {
+      console.log(`[VERBOSE] ${username} | audioStream data #${audioStreamDataCount} (size: ${chunk.length} bytes)`);
+    }
+  });
 
   // Opusデコーダーのエラーハンドリング
   opusDecoder.on("error", (error: any) => {
@@ -119,9 +129,21 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     // エラーイベントをキャッチすることで、ストリームが停止しないようにする
   });
 
+  // Opusデコーダーのライフサイクルイベント（デバッグ用）
+  opusDecoder.on("end", () => {
+    console.log(`[Audio] OpusDecoder ended for ${username}`);
+  });
+  opusDecoder.on("close", () => {
+    console.log(`[Audio] OpusDecoder closed for ${username}`);
+  });
+  opusDecoder.on("finish", () => {
+    console.log(`[Audio] OpusDecoder finished for ${username}`);
+  });
+
   opusDecoder.on("data", (pcmData: Buffer) => {
     // 音声データ受信時刻を更新
     state.lastAudioDataTime = Date.now();
+    opusDecoderDataCount++;
 
     if (!firstDataReceived) {
       firstDataReceived = true;
@@ -133,6 +155,8 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           `[VERBOSE] ${username} | 音声データ受信開始 (サンプリングレート: 48000Hz, チャンネル数: 2)`
         );
       }
+    } else if (config.VERBOSE && opusDecoderDataCount <= 5) {
+      console.log(`[VERBOSE] ${username} | opusDecoder data #${opusDecoderDataCount} (size: ${pcmData.length} bytes)`);
     }
 
     // ローカルVAD: 音量レベルを計算（環境雑音を無視するため）
