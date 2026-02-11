@@ -15,6 +15,7 @@ const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID!;
 const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
+const VERBOSE = process.env.VERBOSE === "true";
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -57,6 +58,9 @@ interface UserTranscriptionState {
   silenceTimer: NodeJS.Timeout | null;
   currentTranscript: string;
   isSpeaking: boolean;
+  lastVerboseLog: number; // VERBOSE モード用：最後のログ出力時刻
+  totalSamples: number; // VERBOSE モード用：処理したサンプル数
+  activeSamples: number; // VERBOSE モード用：閾値を超えたサンプル数
 }
 
 const userStates = new Map<string, UserTranscriptionState>();
@@ -203,6 +207,9 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     silenceTimer: null,
     currentTranscript: "",
     isSpeaking: false,
+    lastVerboseLog: Date.now(),
+    totalSamples: 0,
+    activeSamples: 0,
   };
   userStates.set(userId, state);
 
@@ -236,6 +243,31 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     // 音量閾値（環境雑音より大きい場合のみ発話と判断）
     const VOLUME_THRESHOLD = 500;
 
+    // VERBOSE モード：統計情報を収集
+    if (VERBOSE) {
+      state.totalSamples++;
+      if (averageVolume > VOLUME_THRESHOLD) {
+        state.activeSamples++;
+      }
+
+      // 1秒ごとにログ出力
+      const now = Date.now();
+      if (now - state.lastVerboseLog >= 1000) {
+        const activePercentage =
+          state.totalSamples > 0
+            ? ((state.activeSamples / state.totalSamples) * 100).toFixed(1)
+            : "0.0";
+        console.log(
+          `[VERBOSE] ${username} | 音量: ${averageVolume.toFixed(0)} | 閾値: ${VOLUME_THRESHOLD} | ` +
+            `音声検出: ${averageVolume > VOLUME_THRESHOLD ? "✓" : "✗"} | ` +
+            `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples})`
+        );
+        state.lastVerboseLog = now;
+        state.totalSamples = 0;
+        state.activeSamples = 0;
+      }
+    }
+
     if (averageVolume > VOLUME_THRESHOLD) {
       state.lastAudioTime = Date.now();
       state.isSpeaking = true;
@@ -245,6 +277,9 @@ function listenToUser(userId: string, username: string, audioStream: any) {
         const readyState = deepgramStream.getReadyState();
         if (readyState === 1) {
           deepgramStream.send(pcmData);
+          if (VERBOSE && !state.isSpeaking) {
+            console.log(`[VERBOSE] ${username} | Deepgramへ送信開始`);
+          }
         } else if (readyState === 0) {
           // 接続中なので待機（ログを出さない）
         } else {
