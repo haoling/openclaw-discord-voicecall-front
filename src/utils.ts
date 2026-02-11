@@ -78,26 +78,39 @@ async function playSoundEffect(soundFilePath: string): Promise<void> {
 
     // 再生完了を待機
     await new Promise<void>((resolve) => {
-      audioPlayer.on(AudioPlayerStatus.Idle, () => {
-        if (config.VERBOSE) {
-          console.log("[Sound] 効果音の再生が完了しました");
+      let isResolved = false;
+
+      // タイムアウト設定（5秒）
+      const timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          if (config.VERBOSE) {
+            console.log("[Sound] 効果音の再生がタイムアウトしました");
+          }
+          resolve();
         }
-        resolve();
+      }, 5000);
+
+      audioPlayer.on(AudioPlayerStatus.Idle, () => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          if (config.VERBOSE) {
+            console.log("[Sound] 効果音の再生が完了しました");
+          }
+          resolve();
+        }
       });
 
       // エラーハンドリング
       audioPlayer.on("error", (error) => {
-        console.error("[Sound] 効果音の再生中にエラーが発生しました:", error);
-        resolve();
-      });
-
-      // タイムアウト設定（5秒）
-      setTimeout(() => {
-        if (config.VERBOSE) {
-          console.log("[Sound] 効果音の再生がタイムアウトしました");
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          console.error("[Sound] 効果音の再生中にエラーが発生しました:", error);
+          resolve();
         }
-        resolve();
-      }, 5000);
+      });
     });
   } catch (error) {
     console.error("[Sound] 効果音の再生に失敗しました:", error);
