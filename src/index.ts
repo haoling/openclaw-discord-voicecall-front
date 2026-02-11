@@ -117,17 +117,30 @@ function createDeepgramStream(userId: string, username: string) {
     sample_rate: 48000,
     channels: 2,
     interim_results: false, // 最終結果のみ取得
-    endpointing: false, // 手動でエンドポイントを制御
   });
 
   console.log(
     `[Deepgram] Live connection object created for ${username}, initial state: ${dgConnection.getReadyState()}`
   );
 
+  // 接続状態の変化を監視
+  const checkConnectionState = setInterval(() => {
+    const state = dgConnection.getReadyState();
+    console.log(`[Deepgram] Connection state check for ${username}: ${state}`);
+    if (state === 1) {
+      console.log(`[Deepgram] Connection is now OPEN for ${username}`);
+      clearInterval(checkConnectionState);
+    } else if (state === 3) {
+      console.log(`[Deepgram] Connection is CLOSED for ${username}`);
+      clearInterval(checkConnectionState);
+    }
+  }, 500);
+
   dgConnection.on(LiveTranscriptionEvents.Open, () => {
     console.log(
       `[Deepgram] Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
     );
+    clearInterval(checkConnectionState);
   });
 
   dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
@@ -220,25 +233,44 @@ function listenToUser(userId: string, username: string, audioStream: any) {
   });
 
   opusDecoder.on("data", (pcmData: Buffer) => {
-    state.lastAudioTime = Date.now();
-    state.isSpeaking = true;
-
-    // Deepgramに音声データを送信
-    try {
-      const readyState = deepgramStream.getReadyState();
-      if (readyState === 1) {
-        deepgramStream.send(pcmData);
-      } else {
-        console.log(
-          `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
-        );
-      }
-    } catch (error) {
-      console.error(`[Deepgram] Error sending data for ${username}:`, error);
+    // 音量レベルを計算（環境雑音を無視するため）
+    const samples = new Int16Array(
+      pcmData.buffer,
+      pcmData.byteOffset,
+      pcmData.length / 2
+    );
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) {
+      sum += Math.abs(samples[i]);
     }
+    const averageVolume = sum / samples.length;
 
-    // 無音タイマーをリセット
-    resetSilenceTimer(userId);
+    // 音量閾値（環境雑音より大きい場合のみ発話と判断）
+    const VOLUME_THRESHOLD = 500;
+
+    if (averageVolume > VOLUME_THRESHOLD) {
+      state.lastAudioTime = Date.now();
+      state.isSpeaking = true;
+
+      // Deepgramに音声データを送信
+      try {
+        const readyState = deepgramStream.getReadyState();
+        if (readyState === 1) {
+          deepgramStream.send(pcmData);
+        } else if (readyState === 0) {
+          // 接続中なので待機（ログを出さない）
+        } else {
+          console.log(
+            `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
+          );
+        }
+      } catch (error) {
+        console.error(`[Deepgram] Error sending data for ${username}:`, error);
+      }
+
+      // 無音タイマーをリセット
+      resetSilenceTimer(userId);
+    }
   });
 
   audioStream.on("end", () => {
