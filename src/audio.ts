@@ -80,10 +80,19 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     isSendingToDeepgram: false,
     audioBuffer: [],
     lastKeepAliveTime: Date.now(),
+    keepAliveTimer: null,
     finalTranscriptTimer: null,
     lastAudioDataTime: Date.now(),
   };
   userStates.set(userId, state);
+
+  // 定期的なキープアライブタイマーを開始（無音時でもDeepgram接続を維持）
+  state.keepAliveTimer = setInterval(() => {
+    const currentState = userStates.get(userId);
+    if (currentState) {
+      sendKeepAliveIfNeeded(currentState, username);
+    }
+  }, config.KEEP_ALIVE_INTERVAL);
 
   // OpusデコーダーとPCM変換を設定
   const opusDecoder = new prism.opus.Decoder({
@@ -441,6 +450,9 @@ export function cleanupUserState(userId: string) {
   }
   if (state.finalTranscriptTimer) {
     clearTimeout(state.finalTranscriptTimer);
+  }
+  if (state.keepAliveTimer) {
+    clearInterval(state.keepAliveTimer);
   }
 
   // 残りの文字起こし結果を送信

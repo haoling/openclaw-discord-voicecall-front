@@ -17,6 +17,7 @@ export interface UserTranscriptionState {
   isSendingToDeepgram: boolean; // Deepgramに音声データを送信中かどうか
   audioBuffer: Buffer[]; // 発話の立ち上がり部分を捉えるためのバッファ
   lastKeepAliveTime: number; // 最後のキープアライブ送信時刻
+  keepAliveTimer: NodeJS.Timeout | null; // Deepgramへのキープアライブ送信タイマー
   finalTranscriptTimer: NodeJS.Timeout | null; // speech_final後のログ送信タイマー
   lastAudioDataTime: number; // 最後の音声データ受信時刻
 }
