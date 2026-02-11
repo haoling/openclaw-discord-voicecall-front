@@ -27,7 +27,7 @@ function resetSilenceTimer(userId: string) {
       state.currentTranscript = "";
     }
     state.isSpeaking = false;
-  }, 1500);
+  }, 1500); // この値をconfigから取得するように変更
 }
 
 /**
