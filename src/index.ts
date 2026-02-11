@@ -100,10 +100,17 @@ async function sendTranscriptionToChannel(
  * Deepgramストリームを作成
  */
 function createDeepgramStream(userId: string, username: string) {
-  const { createClient } = require("@deepgram/sdk");
+  console.log(`[Deepgram] Creating stream for ${username}`);
+  console.log(
+    `[Deepgram] API Key check: ${DEEPGRAM_API_KEY ? `${DEEPGRAM_API_KEY.substring(0, 8)}...` : "NOT SET"}`
+  );
+
+  const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
   const deepgram = createClient(DEEPGRAM_API_KEY);
 
-  const dgConnection = deepgram.listen.live({
+  console.log(`[Deepgram] Client created, establishing live connection...`);
+
+  const dgConnection = deepgram.listen.v2.connect({
     model: "flux",
     language: "ja",
     encoding: "linear16",
@@ -113,13 +120,17 @@ function createDeepgramStream(userId: string, username: string) {
     endpointing: false, // 手動でエンドポイントを制御
   });
 
-  dgConnection.on("open", () => {
+  console.log(
+    `[Deepgram] Live connection object created for ${username}, initial state: ${dgConnection.getReadyState()}`
+  );
+
+  dgConnection.on(LiveTranscriptionEvents.Open, () => {
     console.log(
       `[Deepgram] Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
     );
   });
 
-  dgConnection.on("Results", (data: any) => {
+  dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
     const transcript = data.channel?.alternatives?.[0]?.transcript;
     if (transcript && transcript.trim()) {
       const state = userStates.get(userId);
@@ -130,7 +141,7 @@ function createDeepgramStream(userId: string, username: string) {
     }
   });
 
-  dgConnection.on("error", (error: any) => {
+  dgConnection.on(LiveTranscriptionEvents.Error, (error: any) => {
     console.error(`[Deepgram] Error for ${username}:`, {
       type: error.type,
       message: error.message,
@@ -141,7 +152,7 @@ function createDeepgramStream(userId: string, username: string) {
     });
   });
 
-  dgConnection.on("close", (event: any) => {
+  dgConnection.on(LiveTranscriptionEvents.Close, (event: any) => {
     console.log(`[Deepgram] Connection closed for ${username}:`, {
       code: event?.code,
       reason: event?.reason,
