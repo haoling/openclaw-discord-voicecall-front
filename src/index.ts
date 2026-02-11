@@ -110,8 +110,8 @@ function createDeepgramStream(userId: string, username: string) {
 
   console.log(`[Deepgram] Client created, establishing live connection...`);
 
-  const dgConnection = deepgram.listen.v2.connect({
-    model: "flux",
+  const dgConnection = deepgram.listen.live({
+    model: "nova-2",
     language: "ja",
     encoding: "linear16",
     sample_rate: 48000,
