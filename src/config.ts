@@ -14,6 +14,7 @@ const BASE_SILENCE_TIME = parseInt(process.env.BASE_SILENCE_TIME || "1500", 10);
 const VOLUME_THRESHOLD = parseInt(process.env.VOLUME_THRESHOLD || "150", 10); // 音量閾値（環境変数で設定可能、デフォルト: 150）
 const AUDIO_BUFFER_SIZE = 30; // オーディオバッファサイズ（約600ms分、20msフレーム × 30）
 const KEEP_ALIVE_INTERVAL = 5000; // Deepgramキープアライブ送信間隔（5秒）
+const SOUND_EFFECT_PATH = process.env.SOUND_EFFECT_PATH || "assets/sounds/pin1.mp3"; // 効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/pin1.mp3）
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -60,6 +61,9 @@ console.log(
 console.log(
   `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL || "未設定"}`
 );
+console.log(
+  `SOUND_EFFECT_PATH: ${SOUND_EFFECT_PATH}`
+);
 console.log("====================");
 
 export const config = {
@@ -78,4 +82,5 @@ export const config = {
   VOLUME_THRESHOLD,
   AUDIO_BUFFER_SIZE,
   KEEP_ALIVE_INTERVAL,
+  SOUND_EFFECT_PATH,
 } as const;

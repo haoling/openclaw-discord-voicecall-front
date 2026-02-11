@@ -206,7 +206,9 @@ export async function sendTranscriptionToChannel(
     (async () => {
       try {
         // LLMに送信する前に効果音を再生
-        const soundPath = path.join(__dirname, "..", "assets", "sounds", "pin1.mp3");
+        const soundPath = path.isAbsolute(config.SOUND_EFFECT_PATH)
+          ? config.SOUND_EFFECT_PATH
+          : path.join(__dirname, "..", config.SOUND_EFFECT_PATH);
         await playSoundEffect(soundPath);
 
         const llmResponse = await sendChatCompletionRequest(transcript);
