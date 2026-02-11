@@ -59,6 +59,7 @@ export function registerEventHandlers() {
       // イベントタイプに基づいてメッセージ内容を決定
       let message: string | null = null;
       let consoleLog: string | null = null;
+      let shouldClearThread = false; // メッセージ送信後にスレッドをクリアするかどうか
 
       // ボイスチャンネルに参加した場合
       if (!oldState.channel && newState.channel) {
@@ -94,10 +95,9 @@ export function registerEventHandlers() {
         // 退出後の非BOTメンバー数を確認
         const afterCount = oldState.channel.members.filter(m => !m.user.bot).size;
 
-        // botしか居なくなった場合、アクティブなスレッドをクリア
+        // botしか居なくなった場合、メッセージ送信後にスレッドをクリアするフラグを立てる
         if (afterCount === 0) {
-          setActiveThread(null);
-          console.log("Voice channel is now empty (only bots), thread cleared");
+          shouldClearThread = true;
         }
       }
       // ボイスチャンネル間を移動した場合
@@ -123,6 +123,12 @@ export function registerEventHandlers() {
           await cachedLogChannel.send(message);
         }
         console.log(consoleLog);
+
+        // 退出後にスレッドをクリアする必要がある場合
+        if (shouldClearThread) {
+          setActiveThread(null);
+          console.log("Voice channel is now empty (only bots), thread cleared");
+        }
       }
     } catch (error) {
       console.error("Error in voiceStateUpdate handler:", error);
