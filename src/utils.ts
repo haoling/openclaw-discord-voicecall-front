@@ -1,5 +1,13 @@
-import { getCachedLogChannel } from "./state";
+import { getCachedLogChannel, getVoiceConnection } from "./state";
 import { config } from "./config";
+import {
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus,
+  VoiceConnectionStatus,
+} from "@discordjs/voice";
+import * as path from "path";
+import * as fs from "fs";
 
 /**
  * OpenAI chat completion互換APIのレスポンス型
@@ -26,6 +34,65 @@ export function getJapaneseTimestamp(): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/**
+ * ボイスチャンネルに効果音を再生
+ */
+async function playSoundEffect(soundFilePath: string): Promise<void> {
+  const connection = getVoiceConnection();
+
+  // ボイス接続がない、または接続が確立されていない場合はスキップ
+  if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) {
+    if (config.VERBOSE) {
+      console.log("[Sound] ボイス接続が確立されていないため、効果音の再生をスキップします");
+    }
+    return;
+  }
+
+  // 音声ファイルの存在確認
+  if (!fs.existsSync(soundFilePath)) {
+    console.error(`[Sound] 効果音ファイルが見つかりません: ${soundFilePath}`);
+    return;
+  }
+
+  try {
+    const audioPlayer = createAudioPlayer();
+    const resource = createAudioResource(soundFilePath);
+
+    audioPlayer.play(resource);
+    connection.subscribe(audioPlayer);
+
+    if (config.VERBOSE) {
+      console.log(`[Sound] 効果音を再生中: ${soundFilePath}`);
+    }
+
+    // 再生完了を待機
+    await new Promise<void>((resolve) => {
+      audioPlayer.on(AudioPlayerStatus.Idle, () => {
+        if (config.VERBOSE) {
+          console.log("[Sound] 効果音の再生が完了しました");
+        }
+        resolve();
+      });
+
+      // エラーハンドリング
+      audioPlayer.on("error", (error) => {
+        console.error("[Sound] 効果音の再生中にエラーが発生しました:", error);
+        resolve();
+      });
+
+      // タイムアウト設定（5秒）
+      setTimeout(() => {
+        if (config.VERBOSE) {
+          console.log("[Sound] 効果音の再生がタイムアウトしました");
+        }
+        resolve();
+      }, 5000);
+    });
+  } catch (error) {
+    console.error("[Sound] 効果音の再生に失敗しました:", error);
+  }
 }
 
 /**
@@ -137,6 +204,10 @@ export async function sendTranscriptionToChannel(
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
     (async () => {
       try {
+        // LLMに送信する前に効果音を再生
+        const soundPath = path.join(__dirname, "..", "assets", "sounds", "pin1.mp3");
+        await playSoundEffect(soundPath);
+
         const llmResponse = await sendChatCompletionRequest(transcript);
         if (llmResponse) {
           const llmTimestamp = getJapaneseTimestamp();
