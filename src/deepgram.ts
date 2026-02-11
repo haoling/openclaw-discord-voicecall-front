@@ -84,8 +84,7 @@ export function createDeepgramStream(userId: string, username: string) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
 
-          // speech_finalがtrueの場合、動的VADしきい値を引き上げ
-          // モバイル版Discordからの低音量ノイズを無視して無音検出を機能させる
+          // speech_finalがtrueの場合、タイマーを設定して音声データの有無で判断
           if (speechFinal && state.currentTranscript.trim()) {
             // 既存のタイマーをクリア（もしあれば）
             if (state.finalTranscriptTimer) {
@@ -93,45 +92,50 @@ export function createDeepgramStream(userId: string, username: string) {
               state.finalTranscriptTimer = null;
             }
 
-            // 発話中の平均音量を計算
-            if (state.speakingVolumeCount > 0) {
-              state.speakingAverageVolume = state.speakingVolumeSum / state.speakingVolumeCount;
+            const currentAudioDataTime = state.lastAudioDataTime;
 
-              // 動的しきい値を算出
-              // 平均音量の比率、ただしMIN_ELEVATED_THRESHOLD以上、MAX_ELEVATED_THRESHOLD以下
-              const calculatedThreshold = state.speakingAverageVolume * config.DYNAMIC_THRESHOLD_RATIO;
-              const elevatedThreshold = Math.max(
-                config.MIN_ELEVATED_THRESHOLD,
-                Math.min(calculatedThreshold, config.MAX_ELEVATED_THRESHOLD)
+            if (config.VERBOSE) {
+              console.log(
+                `[VERBOSE] ${username} | speech_final検出 - ` +
+                `${config.BASE_SILENCE_TIME}ms後に音声データの有無をチェック`
               );
+            }
 
-              state.dynamicVolumeThreshold = elevatedThreshold;
-              state.thresholdElevationTime = Date.now();
-
-              // 無音検出を即座に開始するため、silenceStartTimeを強制的にリセット
-              // speech_final受信時点で発話は終了しているため、ここから無音として扱う
-              state.silenceStartTime = Date.now();
-              if (config.VERBOSE) {
-                console.log(`[VERBOSE] ${username} | speech_final検出時に無音開始時刻をリセット`);
-              }
+            // BASE_SILENCE_TIME後に音声データが来ていなければログ送信
+            state.finalTranscriptTimer = setTimeout(() => {
+              const timeSinceAudioData = Date.now() - state.lastAudioDataTime;
 
               if (config.VERBOSE) {
                 console.log(
-                  `[VERBOSE] ${username} | speech_final検出\n` +
-                  `  発話統計: 平均=${state.speakingAverageVolume.toFixed(0)} | ` +
-                  `最大=${state.speakingMaxVolume.toFixed(0)} | サンプル数=${state.speakingVolumeCount}\n` +
-                  `  算出しきい値: ${calculatedThreshold.toFixed(0)} → 適用値: ${elevatedThreshold.toFixed(0)} ` +
-                  `(比率: ${config.DYNAMIC_THRESHOLD_RATIO})`
+                  `[VERBOSE] ${username} | タイマー発火 - ` +
+                  `最後の音声データから${timeSinceAudioData}ms経過`
                 );
               }
-            } else {
-              // 統計がない場合は通常のしきい値を維持
-              // それでも無音検出を開始するため、silenceStartTimeを強制的にリセット
-              state.silenceStartTime = Date.now();
-              if (config.VERBOSE) {
-                console.log(`[VERBOSE] ${username} | speech_final検出 (統計なし、しきい値維持) - 無音開始時刻をリセット`);
+
+              // タイマー設定時点から新しい音声データが来ていなければ送信
+              if (state.lastAudioDataTime === currentAudioDataTime) {
+                if (state.currentTranscript.trim()) {
+                  if (config.VERBOSE) {
+                    console.log(
+                      `[VERBOSE] ${username} | 音声データなし → ログ送信: "${state.currentTranscript.trim()}"`
+                    );
+                  }
+                  sendTranscriptionToChannel(state.username, state.currentTranscript.trim());
+                  state.currentTranscript = "";
+                }
+                state.isSpeaking = false;
+                state.isSendingToDeepgram = false;
+              } else {
+                // 新しい音声データが来ている場合はスキップ
+                if (config.VERBOSE) {
+                  console.log(
+                    `[VERBOSE] ${username} | 新しい音声データあり - ログ送信をスキップ`
+                  );
+                }
               }
-            }
+
+              state.finalTranscriptTimer = null;
+            }, config.BASE_SILENCE_TIME);
           }
         }
       } else if (config.VERBOSE && transcript && transcript.trim()) {

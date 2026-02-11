@@ -18,14 +18,5 @@ export interface UserTranscriptionState {
   audioBuffer: Buffer[]; // 発話の立ち上がり部分を捉えるためのバッファ
   lastKeepAliveTime: number; // 最後のキープアライブ送信時刻
   finalTranscriptTimer: NodeJS.Timeout | null; // speech_final後のログ送信タイマー
-
-  // 動的VADしきい値調整
-  dynamicVolumeThreshold: number; // 現在のしきい値（初期値: VOLUME_THRESHOLD）
-  thresholdElevationTime: number | null; // しきい値引き上げ開始時刻
-
-  // 発話中の音量統計
-  speakingVolumeSum: number; // 発話中の音量合計
-  speakingVolumeCount: number; // 発話中のサンプル数
-  speakingMaxVolume: number; // 発話中の最大音量
-  speakingAverageVolume: number | null; // 計算済みの平均音量（speech_final時に計算）
+  lastAudioDataTime: number; // 最後の音声データ受信時刻
 }
