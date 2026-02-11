@@ -18,6 +18,8 @@ const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
+const BASE_SILENCE_TIME = 1500; // 無音判定の基準時間（ミリ秒）
+const VOLUME_THRESHOLD = 200; // 音量閾値（環境雑音より大きい場合のみ発話と判断）
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -82,6 +84,9 @@ interface UserTranscriptionState {
   activeSamples: number; // VERBOSE モード用：閾値を超えたサンプル数
   reconnectAttempts: number; // Deepgram再接続試行回数
   lastReconnectTime: number; // 最後の再接続時刻
+  lastSpeechFinal: boolean | null; // Deepgramから最後に受信したspeech_finalの値
+  silenceStartTime: number | null; // 無音開始時刻
+  isSendingToDeepgram: boolean; // Deepgramに音声データを送信中かどうか
 }
 
 const userStates = new Map<string, UserTranscriptionState>();
@@ -181,12 +186,23 @@ function createDeepgramStream(userId: string, username: string) {
         );
       }
 
+      const state = userStates.get(userId);
+
+      // speech_finalの状態を記録
+      if (state && speechFinal !== undefined) {
+        state.lastSpeechFinal = speechFinal;
+        if (VERBOSE) {
+          console.log(
+            `[VERBOSE] ${username} | speech_finalを更新: ${speechFinal}`
+          );
+        }
+      }
+
       // 最終結果のみを使用（中間結果は無視）
       if (transcript && transcript.trim() && isFinal) {
         console.log(
           `[Deepgram] Final transcript for ${username}: "${transcript}"`
         );
-        const state = userStates.get(userId);
         if (state) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
@@ -310,6 +326,9 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     activeSamples: 0,
     reconnectAttempts: 0,
     lastReconnectTime: 0,
+    lastSpeechFinal: null,
+    silenceStartTime: null,
+    isSendingToDeepgram: false,
   };
   userStates.set(userId, state);
 
@@ -360,9 +379,6 @@ function listenToUser(userId: string, username: string, audioStream: any) {
       }
       averageVolume = sum / samples.length;
 
-      // 音量閾値（環境雑音より大きい場合のみ発話と判断）
-      const VOLUME_THRESHOLD = 200;
-
       // VERBOSE モード：統計情報を収集
       if (VERBOSE) {
         state.totalSamples++;
@@ -404,56 +420,181 @@ function listenToUser(userId: string, username: string, audioStream: any) {
       }
     }
 
-    if (shouldSendAudio) {
-      state.lastAudioTime = Date.now();
-
-      // 発話開始を検出
-      if (!state.isSpeaking) {
-        state.isSpeaking = true;
-        if (VERBOSE) {
-          console.log(`[VERBOSE] ${username} | 発話開始を検出`);
-        }
-      }
-
-      // Deepgramに音声データを送信
-      try {
-        const readyState = deepgramStream.getReadyState();
-        if (readyState === 1) {
-          deepgramStream.send(pcmData);
+    // 音声データ送信ロジック
+    if (ENABLE_LOCAL_VAD) {
+      // ローカルVAD有効時: 新しいロジック
+      if (averageVolume > VOLUME_THRESHOLD) {
+        // 音声検出
+        if (!state.isSpeaking) {
+          state.isSpeaking = true;
+          state.silenceStartTime = null;
           if (VERBOSE) {
-            // 10サンプルに1回だけログ出力（ログの洪水を避ける）
-            if (state.totalSamples % 10 === 0) {
+            console.log(`[VERBOSE] ${username} | 音声検出: 発話開始`);
+          }
+        }
+
+        if (!state.isSendingToDeepgram) {
+          // 新しい発話開始、Deepgramへの送信を開始
+          state.isSendingToDeepgram = true;
+          if (VERBOSE) {
+            console.log(
+              `[VERBOSE] ${username} | 新しい発話開始、Deepgramへの送信を開始`
+            );
+          }
+        }
+
+        // speech_final: true が返ってくるまで送信し続ける
+        if (state.isSendingToDeepgram) {
+          try {
+            const readyState = deepgramStream.getReadyState();
+            if (readyState === 1) {
+              deepgramStream.send(pcmData);
+              if (VERBOSE && state.totalSamples % 10 === 0) {
+                console.log(
+                  `[VERBOSE] ${username} | Deepgramへ送信中 (ReadyState: ${readyState}, サンプルサイズ: ${pcmData.length}バイト)`
+                );
+              }
+            } else if (readyState === 0) {
+              if (VERBOSE && state.totalSamples % 50 === 0) {
+                console.log(
+                  `[VERBOSE] ${username} | Deepgram接続待機中 (ReadyState: ${readyState})`
+                );
+              }
+            } else {
               console.log(
-                `[VERBOSE] ${username} | Deepgramへ送信中 (ReadyState: ${readyState}, サンプルサイズ: ${pcmData.length}バイト)`
+                `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `[Deepgram] Error sending data for ${username}:`,
+              error
+            );
+          }
+        }
+      } else {
+        // 無音検出
+        if (state.isSpeaking) {
+          // 無音開始時刻を記録
+          if (!state.silenceStartTime) {
+            state.silenceStartTime = Date.now();
+            if (VERBOSE) {
+              console.log(`[VERBOSE] ${username} | 無音開始を検出`);
+            }
+          }
+
+          const silenceDuration = Date.now() - state.silenceStartTime;
+
+          if (
+            state.lastSpeechFinal === false &&
+            silenceDuration >= BASE_SILENCE_TIME * 3
+          ) {
+            // speech_final: false で 3倍の無音 → 送信停止
+            if (VERBOSE) {
+              console.log(
+                `[VERBOSE] ${username} | speech_final=false + 無音${silenceDuration}ms → Deepgram送信停止`
+              );
+            }
+            state.isSendingToDeepgram = false;
+            state.isSpeaking = false;
+            state.silenceStartTime = null;
+          } else if (
+            state.lastSpeechFinal === true &&
+            silenceDuration >= BASE_SILENCE_TIME
+          ) {
+            // speech_final: true で 1倍の無音 → ログ送信
+            if (state.currentTranscript.trim()) {
+              if (VERBOSE) {
+                console.log(
+                  `[VERBOSE] ${username} | speech_final=true + 無音${silenceDuration}ms → ログ送信`
+                );
+              }
+              sendTranscriptionToChannel(
+                state.username,
+                state.currentTranscript.trim()
+              );
+              state.currentTranscript = "";
+            }
+            state.isSpeaking = false;
+            state.isSendingToDeepgram = false;
+            state.silenceStartTime = null;
+          } else if (state.isSendingToDeepgram) {
+            // まだ無音時間が足りない → 送信継続
+            try {
+              const readyState = deepgramStream.getReadyState();
+              if (readyState === 1) {
+                deepgramStream.send(pcmData);
+                if (VERBOSE && state.totalSamples % 10 === 0) {
+                  console.log(
+                    `[VERBOSE] ${username} | 無音中だがDeepgramへ送信継続 (無音: ${silenceDuration}ms)`
+                  );
+                }
+              }
+            } catch (error) {
+              console.error(
+                `[Deepgram] Error sending data for ${username}:`,
+                error
               );
             }
           }
-        } else if (readyState === 0) {
-          // 接続中なので待機
-          if (VERBOSE && state.totalSamples % 50 === 0) {
+        }
+      }
+    } else {
+      // ローカルVAD無効時: 既存ロジック
+      if (shouldSendAudio) {
+        state.lastAudioTime = Date.now();
+
+        // 発話開始を検出
+        if (!state.isSpeaking) {
+          state.isSpeaking = true;
+          if (VERBOSE) {
+            console.log(`[VERBOSE] ${username} | 発話開始を検出`);
+          }
+        }
+
+        // Deepgramに音声データを送信
+        try {
+          const readyState = deepgramStream.getReadyState();
+          if (readyState === 1) {
+            deepgramStream.send(pcmData);
+            if (VERBOSE) {
+              // 10サンプルに1回だけログ出力（ログの洪水を避ける）
+              if (state.totalSamples % 10 === 0) {
+                console.log(
+                  `[VERBOSE] ${username} | Deepgramへ送信中 (ReadyState: ${readyState}, サンプルサイズ: ${pcmData.length}バイト)`
+                );
+              }
+            }
+          } else if (readyState === 0) {
+            // 接続中なので待機
+            if (VERBOSE && state.totalSamples % 50 === 0) {
+              console.log(
+                `[VERBOSE] ${username} | Deepgram接続待機中 (ReadyState: ${readyState})`
+              );
+            }
+          } else {
             console.log(
-              `[VERBOSE] ${username} | Deepgram接続待機中 (ReadyState: ${readyState})`
+              `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
             );
           }
-        } else {
-          console.log(
-            `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
+        } catch (error) {
+          console.error(
+            `[Deepgram] Error sending data for ${username}:`,
+            error
           );
         }
-      } catch (error) {
-        console.error(`[Deepgram] Error sending data for ${username}:`, error);
-      }
 
-      // 無音タイマーをリセット
-      resetSilenceTimer(userId);
-    } else {
-      // 音量が閾値以下の場合、発話終了をチェック（ローカルVAD有効時のみ）
-      if (ENABLE_LOCAL_VAD && state.isSpeaking && VERBOSE) {
-        // 発話中から無音になった時のみログ出力
-        const timeSinceLastAudio = Date.now() - state.lastAudioTime;
-        if (timeSinceLastAudio > 500) {
-          // 500ms以上無音
-          console.log(`[VERBOSE] ${username} | 無音期間: ${timeSinceLastAudio}ms`);
+        // 無音タイマーをリセット
+        resetSilenceTimer(userId);
+      } else {
+        // 音量が閾値以下の場合、発話終了をチェック（ローカルVAD有効時のみ）
+        if (ENABLE_LOCAL_VAD && state.isSpeaking && VERBOSE) {
+          // 発話中から無音になった時のみログ出力
+          const timeSinceLastAudio = Date.now() - state.lastAudioTime;
+          if (timeSinceLastAudio > 500) {
+            // 500ms以上無音
+            console.log(`[VERBOSE] ${username} | 無音期間: ${timeSinceLastAudio}ms`);
+          }
         }
       }
     }
