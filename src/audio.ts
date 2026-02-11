@@ -101,6 +101,15 @@ export function listenToUser(userId: string, username: string, audioStream: impo
   // 最初のデータ受信をログ出力
   let firstDataReceived = false;
 
+  opusDecoder.on("error", (error: any) => {
+    // Opusデコードエラーは個別のパケットの問題なので、ログ出力のみで継続
+    // モバイル版Discordからの接続時に不正なパケットが送信されることがあるため
+    if (config.VERBOSE) {
+      console.log(`[Audio] Opus decode error for ${username} (continuing):`, error.message);
+    }
+    // ストリーム全体をクリーンアップしない
+  });
+
   opusDecoder.on("data", (pcmData: Buffer) => {
     if (!firstDataReceived) {
       firstDataReceived = true;
@@ -390,6 +399,17 @@ export function listenToUser(userId: string, username: string, audioStream: impo
   });
 
   audioStream.on("error", (error: any) => {
+    // Opusデコードエラーの場合は、個別のパケットの問題なのでクリーンアップしない
+    // モバイル版Discordからの接続時に不正なパケットが送信されることがある
+    if (error.message && error.message.includes("Decode error")) {
+      if (config.VERBOSE) {
+        console.log(`[Audio] Stream decode error for ${username} (ignoring):`, error.message);
+      }
+      // ストリームは継続
+      return;
+    }
+
+    // その他のエラーの場合はクリーンアップ
     console.error(`[Audio] Stream error for ${username}:`, error);
     cleanupUserState(userId);
   });
