@@ -16,4 +16,5 @@ export interface UserTranscriptionState {
   silenceStartTime: number | null; // 無音開始時刻
   isSendingToDeepgram: boolean; // Deepgramに音声データを送信中かどうか
   audioBuffer: Buffer[]; // 発話の立ち上がり部分を捉えるためのバッファ
+  lastKeepAliveTime: number; // 最後のキープアライブ送信時刻
 }
