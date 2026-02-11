@@ -33,7 +33,7 @@ function resetSilenceTimer(userId: string) {
 /**
  * ユーザーの音声ストリームをリッスン
  */
-export function listenToUser(userId: string, username: string, audioStream: any) {
+export function listenToUser(userId: string, username: string, audioStream: import("@discordjs/voice").AudioReceiveStream) {
   console.log(`[Audio] Started listening to ${username}`);
 
   // ユーザーの状態を初期化
