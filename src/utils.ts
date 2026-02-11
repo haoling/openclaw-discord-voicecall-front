@@ -5,6 +5,7 @@ import {
   createAudioResource,
   AudioPlayerStatus,
   VoiceConnectionStatus,
+  entersState,
 } from "@discordjs/voice";
 import * as path from "path";
 import * as fs from "fs";
@@ -65,55 +66,33 @@ async function playSoundEffect(soundFilePath: string): Promise<void> {
     return;
   }
 
-  try {
-    const audioPlayer = createAudioPlayer();
-    const resource = createAudioResource(soundFilePath);
+  const audioPlayer = createAudioPlayer();
+  const subscription = connection.subscribe(audioPlayer);
 
+  audioPlayer.on("error", (error) => {
+    console.error("[Sound] 効果音の再生中にエラーが発生しました:", error);
+  });
+
+  try {
+    const resource = createAudioResource(soundFilePath);
     audioPlayer.play(resource);
-    connection.subscribe(audioPlayer);
 
     if (config.VERBOSE) {
       console.log(`[Sound] 効果音を再生中: ${soundFilePath}`);
     }
 
-    // 再生完了を待機
-    await new Promise<void>((resolve) => {
-      let isResolved = false;
-
-      // タイムアウト設定（5秒）
-      const timeoutId = setTimeout(() => {
-        if (!isResolved) {
-          isResolved = true;
-          if (config.VERBOSE) {
-            console.log("[Sound] 効果音の再生がタイムアウトしました");
-          }
-          resolve();
-        }
-      }, 5000);
-
-      audioPlayer.on(AudioPlayerStatus.Idle, () => {
-        if (!isResolved) {
-          isResolved = true;
-          clearTimeout(timeoutId);
-          if (config.VERBOSE) {
-            console.log("[Sound] 効果音の再生が完了しました");
-          }
-          resolve();
-        }
-      });
-
-      // エラーハンドリング
-      audioPlayer.on("error", (error) => {
-        if (!isResolved) {
-          isResolved = true;
-          clearTimeout(timeoutId);
-          console.error("[Sound] 効果音の再生中にエラーが発生しました:", error);
-          resolve();
-        }
-      });
-    });
+    await entersState(audioPlayer, AudioPlayerStatus.Idle, 5_000);
+    if (config.VERBOSE) {
+      console.log("[Sound] 効果音の再生が完了しました");
+    }
   } catch (error) {
-    console.error("[Sound] 効果音の再生に失敗しました:", error);
+    if (config.VERBOSE) {
+      console.log("[Sound] 効果音の再生がタイムアウトまたは失敗しました");
+    }
+    console.error("[Sound] 効果音の再生処理でエラー:", error);
+  } finally {
+    subscription?.unsubscribe();
+    audioPlayer.stop();
   }
 }
 
