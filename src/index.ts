@@ -135,7 +135,9 @@ function createDeepgramStream(userId: string, username: string) {
     encoding: "linear16",
     sample_rate: 48000,
     channels: 2,
-    interim_results: false, // 最終結果のみ取得
+    interim_results: true, // 中間結果も取得（より早く応答を得る）
+    utterance_end_ms: 1500, // 1.5秒の無音で発話終了と判断
+    vad_events: true, // 音声活動検出イベントを有効化
   });
 
   console.log(
@@ -154,20 +156,31 @@ function createDeepgramStream(userId: string, username: string) {
     // Openイベント内でTranscript, Error, Closeイベントを登録
     dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
       const transcript = data.channel?.alternatives?.[0]?.transcript;
+      const isFinal = data.is_final;
+      const speechFinal = data.speech_final;
+
       if (VERBOSE) {
         console.log(
-          `[VERBOSE] ${username} | Deepgramからの応答:`,
-          JSON.stringify(data, null, 2)
+          `[VERBOSE] ${username} | Deepgramからの応答 (is_final: ${isFinal}, speech_final: ${speechFinal}):`,
+          transcript || "(空)"
         );
       }
-      if (transcript && transcript.trim()) {
-        console.log(`[Deepgram] Transcript received for ${username}: "${transcript}"`);
+
+      // 最終結果のみを使用（中間結果は無視）
+      if (transcript && transcript.trim() && isFinal) {
+        console.log(
+          `[Deepgram] Final transcript for ${username}: "${transcript}"`
+        );
         const state = userStates.get(userId);
         if (state) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
         }
-      } else if (VERBOSE) {
+      } else if (VERBOSE && transcript && transcript.trim()) {
+        console.log(
+          `[VERBOSE] ${username} | 中間結果（無視）: "${transcript}"`
+        );
+      } else if (VERBOSE && !transcript) {
         console.log(`[VERBOSE] ${username} | 空の文字起こし結果を受信`);
       }
     });
@@ -207,7 +220,8 @@ function resetSilenceTimer(userId: string) {
     clearTimeout(state.silenceTimer);
   }
 
-  // 新しいタイマーを設定（1秒の無音で発話終了）
+  // 新しいタイマーを設定（1.5秒の無音で発話終了）
+  // Deepgramのutterance_end_msと同じ値に設定
   state.silenceTimer = setTimeout(() => {
     if (state.currentTranscript.trim()) {
       // 文字起こし結果を送信
@@ -215,7 +229,7 @@ function resetSilenceTimer(userId: string) {
       state.currentTranscript = "";
     }
     state.isSpeaking = false;
-  }, 1000);
+  }, 1500);
 }
 
 /**
@@ -283,7 +297,8 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     const averageVolume = sum / samples.length;
 
     // 音量閾値（環境雑音より大きい場合のみ発話と判断）
-    const VOLUME_THRESHOLD = 500;
+    // 閾値を下げて、より多くの音声を検出できるようにする
+    const VOLUME_THRESHOLD = 200;
 
     // VERBOSE モード：統計情報を収集
     if (VERBOSE) {
