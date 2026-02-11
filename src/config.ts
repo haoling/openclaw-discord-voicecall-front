@@ -6,7 +6,7 @@ const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const CHAT_COMPLETION_ENDPOINT_URL = process.env.CHAT_COMPLETION_ENDPOINT_URL || "";
 const CHAT_COMPLETION_APIKEY = process.env.CHAT_COMPLETION_APIKEY || "";
 const CHAT_COMPLETION_MODEL = process.env.CHAT_COMPLETION_MODEL || "gpt-4"; // LLMモデル名（環境変数で設定可能、デフォルト: gpt-4）
-const CHAT_COMPLETION_SESSION_KEY = process.env.CHAT_COMPLETION_SESSION_KEY || "fixed-session-key-placeholder"; // セッションキー（固定値、後で変更可能）
+const CHAT_COMPLETION_SESSION_KEY = "fixed-session-key-placeholder"; // セッションキー固定値（後で自動算出に変更予定）
 const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
@@ -59,9 +59,6 @@ console.log(
 );
 console.log(
   `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL ? CHAT_COMPLETION_MODEL : "未設定"}`
-);
-console.log(
-  `CHAT_COMPLETION_SESSION_KEY: ${CHAT_COMPLETION_SESSION_KEY ? CHAT_COMPLETION_SESSION_KEY : "未設定"}`
 );
 console.log("====================");
 
