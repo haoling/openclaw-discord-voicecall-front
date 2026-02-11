@@ -23,5 +23,6 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 
 COPY --from=builder /app/dist ./dist
+COPY assets/ ./assets/
 
 CMD ["node", "dist/index.js"]
