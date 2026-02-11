@@ -1,5 +1,6 @@
 import { config } from "./config";
 import { userStates } from "./state";
+import { sendTranscriptionToChannel } from "./utils";
 
 /**
  * Deepgramストリームを作成
@@ -82,6 +83,60 @@ export function createDeepgramStream(userId: string, username: string) {
         if (state) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
+
+          // speech_finalがtrueの場合、タイマーを設定して音声データの有無で判断
+          if (speechFinal && state.currentTranscript.trim()) {
+            // 既存のタイマーをクリア（もしあれば）
+            if (state.finalTranscriptTimer) {
+              clearTimeout(state.finalTranscriptTimer);
+              state.finalTranscriptTimer = null;
+            }
+
+            const currentAudioDataTime = state.lastAudioDataTime;
+
+            if (config.VERBOSE) {
+              console.log(
+                `[VERBOSE] ${username} | speech_final検出 - ` +
+                `${config.BASE_SILENCE_TIME}ms後に音声データの有無をチェック`
+              );
+            }
+
+            // BASE_SILENCE_TIME後に音声データが来ていなければログ送信
+            state.finalTranscriptTimer = setTimeout(() => {
+              const timeSinceAudioData = Date.now() - state.lastAudioDataTime;
+
+              if (config.VERBOSE) {
+                console.log(
+                  `[VERBOSE] ${username} | タイマー発火 - ` +
+                  `最後の音声データから${timeSinceAudioData}ms経過`
+                );
+              }
+
+              // タイマー設定時点から新しい音声データが来ていなければ送信
+              if (state.lastAudioDataTime === currentAudioDataTime) {
+                if (state.currentTranscript.trim()) {
+                  if (config.VERBOSE) {
+                    console.log(
+                      `[VERBOSE] ${username} | 音声データなし → ログ送信: "${state.currentTranscript.trim()}"`
+                    );
+                  }
+                  sendTranscriptionToChannel(state.username, state.currentTranscript.trim());
+                  state.currentTranscript = "";
+                }
+                state.isSpeaking = false;
+                state.isSendingToDeepgram = false;
+              } else {
+                // 新しい音声データが来ている場合はスキップ
+                if (config.VERBOSE) {
+                  console.log(
+                    `[VERBOSE] ${username} | 新しい音声データあり - ログ送信をスキップ`
+                  );
+                }
+              }
+
+              state.finalTranscriptTimer = null;
+            }, config.BASE_SILENCE_TIME);
+          }
         }
       } else if (config.VERBOSE && transcript && transcript.trim()) {
         console.log(

@@ -1,4 +1,3 @@
-import { pipeline } from "stream";
 import * as prism from "prism-media";
 import { config } from "./config";
 import { userStates } from "./state";
@@ -81,27 +80,43 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     isSendingToDeepgram: false,
     audioBuffer: [],
     lastKeepAliveTime: Date.now(),
+    keepAliveTimer: null,
+    finalTranscriptTimer: null,
+    lastAudioDataTime: Date.now(),
   };
   userStates.set(userId, state);
 
-  // OpusデコーダーとPCM変換を設定
-  const opusDecoder = new prism.opus.Decoder({
-    rate: 48000,
-    channels: 2,
-    frameSize: 960,
-  });
-
-  // 音声データをDeepgramに送信
-  pipeline(audioStream, opusDecoder, (err) => {
-    if (err) {
-      console.error(`[Audio] Pipeline error for ${username}:`, err);
+  // 定期的なキープアライブタイマーを開始（無音時でもDeepgram接続を維持）
+  state.keepAliveTimer = setInterval(() => {
+    const currentState = userStates.get(userId);
+    if (currentState) {
+      sendKeepAliveIfNeeded(currentState, username);
     }
-  });
+  }, config.KEEP_ALIVE_INTERVAL);
 
   // 最初のデータ受信をログ出力
   let firstDataReceived = false;
+  let audioStreamDataCount = 0;
+  let opusDecoderDataCount = 0;
 
-  opusDecoder.on("data", (pcmData: Buffer) => {
+  // audioStreamのデータ受信をモニタリング（デバッグ用）
+  audioStream.on("data", (chunk: Buffer) => {
+    audioStreamDataCount++;
+    if (config.VERBOSE && audioStreamDataCount <= 5) {
+      console.log(`[VERBOSE] ${username} | audioStream data #${audioStreamDataCount} (size: ${chunk.length} bytes)`);
+    }
+  });
+
+  // OpusデコーダーとPCM変換を設定
+  // エラーでクローズされた場合に再作成できるように、参照を保持
+  let currentOpusDecoder: any = null;
+
+  // Opusデコーダーのdataイベントハンドラー（再利用可能）
+  const handleOpusData = (pcmData: Buffer) => {
+    // 音声データ受信時刻を更新
+    state.lastAudioDataTime = Date.now();
+    opusDecoderDataCount++;
+
     if (!firstDataReceived) {
       firstDataReceived = true;
       console.log(
@@ -112,6 +127,8 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           `[VERBOSE] ${username} | 音声データ受信開始 (サンプリングレート: 48000Hz, チャンネル数: 2)`
         );
       }
+    } else if (config.VERBOSE && opusDecoderDataCount <= 5) {
+      console.log(`[VERBOSE] ${username} | opusDecoder data #${opusDecoderDataCount} (size: ${pcmData.length} bytes)`);
     }
 
     // ローカルVAD: 音量レベルを計算（環境雑音を無視するため）
@@ -146,7 +163,8 @@ export function listenToUser(userId: string, username: string, audioStream: impo
               ? ((state.activeSamples / state.totalSamples) * 100).toFixed(1)
               : "0.0";
           console.log(
-            `[VERBOSE] ${username} | ローカルVAD: 有効 | 音量: ${averageVolume.toFixed(0)} | 閾値: ${config.VOLUME_THRESHOLD} | ` +
+            `[VERBOSE] ${username} | ローカルVAD: 有効 | 音量: ${averageVolume.toFixed(0)} | ` +
+              `閾値: ${config.VOLUME_THRESHOLD} | ` +
               `音声検出: ${averageVolume > config.VOLUME_THRESHOLD ? "✓" : "✗"} | ` +
               `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples})`
           );
@@ -156,6 +174,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         }
       }
 
+      // 音量閾値で判定
       shouldSendAudio = averageVolume > config.VOLUME_THRESHOLD;
     } else {
       // ローカルVADが無効な場合、すべての音声をDeepgramに送信
@@ -313,6 +332,12 @@ export function listenToUser(userId: string, username: string, audioStream: impo
                 error
               );
             }
+
+            // 無音検出中もキープアライブを送信（Deepgramタイムアウト防止）
+            sendKeepAliveIfNeeded(state, username);
+          } else {
+            // isSendingToDeepgramがfalseの場合もキープアライブを送信
+            sendKeepAliveIfNeeded(state, username);
           }
         } else {
           // 発話していない無音時のキープアライブ
@@ -382,15 +407,91 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         sendKeepAliveIfNeeded(state, username);
       }
     }
-  });
+  };
 
-  audioStream.on("end", () => {
-    console.log(`[Audio] Stream ended for ${username}`);
+  // OpusDeコーダーを作成して接続する関数
+  const createAndConnectOpusDecoder = () => {
+    const opusDecoder = new prism.opus.Decoder({
+      rate: 48000,
+      channels: 2,
+      frameSize: 960,
+    });
+
+    // Opusデコーダーのエラーハンドリング
+    opusDecoder.on("error", (error: any) => {
+      // Opusデコードエラーは個別のパケットの問題なので、ログ出力のみ
+      if (config.VERBOSE) {
+        console.log(`[Audio] Opus decode error for ${username} (ignoring packet):`, error.message);
+      }
+      // エラーをキャッチすることでストリームへのエラー伝播を防ぐ
+    });
+
+    // Opusデコーダーのcloseイベント - エラーでクローズされた場合に再作成
+    opusDecoder.on("close", () => {
+      console.log(`[Audio] OpusDecoder closed for ${username}`);
+
+      // 現在のデコーダーをunpipe
+      if (currentOpusDecoder) {
+        audioStream.unpipe(currentOpusDecoder);
+      }
+
+      // ユーザーの状態が残っている場合のみ再作成
+      const currentState = userStates.get(userId);
+      if (currentState) {
+        console.log(`[Audio] Recreating OpusDecoder for ${username}...`);
+        // 少し待ってから再作成（即座に再作成すると問題が発生する可能性があるため）
+        setTimeout(() => {
+          const state = userStates.get(userId);
+          if (state) {
+            createAndConnectOpusDecoder();
+          }
+        }, 100);
+      }
+    });
+
+    // Opusデコーダーのその他のライフサイクルイベント（デバッグ用）
+    opusDecoder.on("end", () => {
+      console.log(`[Audio] OpusDecoder ended for ${username}`);
+    });
+    opusDecoder.on("finish", () => {
+      console.log(`[Audio] OpusDecoder finished for ${username}`);
+    });
+
+    // dataイベントハンドラーを設定
+    opusDecoder.on("data", handleOpusData);
+
+    // 音声ストリームをOpusデコーダーに接続
+    audioStream.pipe(opusDecoder);
+
+    // 現在のデコーダーを更新
+    currentOpusDecoder = opusDecoder;
+
+    console.log(`[Audio] OpusDecoder connected for ${username}`);
+  };
+
+  // 最初のOpusデコーダーを作成
+  createAndConnectOpusDecoder();
+
+  // audioStreamのエラーハンドリング
+  audioStream.on("error", (error: any) => {
+    // Opusデコードエラーの場合は、個別のパケットの問題なのでクリーンアップしない
+    // モバイル版Discordからの接続時に不正なパケットが送信されることがある
+    if (error.message && error.message.includes("Decode error")) {
+      if (config.VERBOSE) {
+        console.log(`[Audio] Stream decode error for ${username} (ignoring packet):`, error.message);
+      }
+      // デコードに失敗したパケットは破棄し、ストリームは継続
+      return;
+    }
+
+    // その他のエラーの場合はクリーンアップ
+    console.error(`[Audio] Stream error for ${username}:`, error);
     cleanupUserState(userId);
   });
 
-  audioStream.on("error", (error: any) => {
-    console.error(`[Audio] Stream error for ${username}:`, error);
+  // audioStreamの終了イベント
+  audioStream.on("end", () => {
+    console.log(`[Audio] Stream ended for ${username}`);
     cleanupUserState(userId);
   });
 }
@@ -405,6 +506,12 @@ export function cleanupUserState(userId: string) {
   // タイマーをクリア
   if (state.silenceTimer) {
     clearTimeout(state.silenceTimer);
+  }
+  if (state.finalTranscriptTimer) {
+    clearTimeout(state.finalTranscriptTimer);
+  }
+  if (state.keepAliveTimer) {
+    clearInterval(state.keepAliveTimer);
   }
 
   // 残りの文字起こし結果を送信
