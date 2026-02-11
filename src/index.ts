@@ -16,6 +16,7 @@ const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID!;
 const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const VERBOSE = process.env.VERBOSE === "true";
+const ENABLE_VAD = process.env.ENABLE_VAD !== "false"; // デフォルトはtrue
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -41,6 +42,7 @@ if (!DEEPGRAM_API_KEY) {
 // 起動時に環境変数の状態を出力
 console.log("=== 環境変数の状態 ===");
 console.log(`VERBOSE: ${VERBOSE}`);
+console.log(`ENABLE_VAD: ${ENABLE_VAD}`);
 console.log(`DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN ? "設定済み" : "未設定"}`);
 console.log(
   `DISCORD_LOG_CHANNEL_ID: ${DISCORD_LOG_CHANNEL_ID ? DISCORD_LOG_CHANNEL_ID : "未設定"}`
@@ -125,6 +127,7 @@ function createDeepgramStream(userId: string, username: string) {
   console.log(
     `[Deepgram] API Key check: ${DEEPGRAM_API_KEY ? `${DEEPGRAM_API_KEY.substring(0, 8)}...` : "NOT SET"}`
   );
+  console.log(`[Deepgram] VAD enabled: ${ENABLE_VAD}`);
 
   const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
   const deepgram = createClient(DEEPGRAM_API_KEY);
@@ -139,7 +142,7 @@ function createDeepgramStream(userId: string, username: string) {
     channels: 2,
     interim_results: true, // 中間結果も取得（より早く応答を得る）
     utterance_end_ms: 1500, // 1.5秒の無音で発話終了と判断
-    vad_events: true, // 音声活動検出イベントを有効化
+    vad_events: ENABLE_VAD, // 音声活動検出イベントを有効化（環境変数で制御）
     smart_format: true, // スマートフォーマット（句読点など）
     no_delay: true, // 遅延を最小化
   });
