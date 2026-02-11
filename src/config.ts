@@ -58,7 +58,7 @@ console.log(
   `CHAT_COMPLETION_APIKEY: ${CHAT_COMPLETION_APIKEY ? `${CHAT_COMPLETION_APIKEY.substring(0, 8)}...` : "未設定"}`
 );
 console.log(
-  `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL ? CHAT_COMPLETION_MODEL : "未設定"}`
+  `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL || "未設定"}`
 );
 console.log("====================");
 
