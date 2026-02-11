@@ -353,17 +353,18 @@ export async function sendTranscriptionToChannel(
           const llmTimestamp = getJapaneseTimestamp();
           const llmMessage = `🤖 **LLM応答** — ${llmTimestamp}\n${llmResponse}`;
 
-          // ログチャンネルに投稿とTTS音声再生を並列実行
-          const logPromise = cachedLogChannel.send(llmMessage);
-          const ttsPromise = (async () => {
+          // ログチャンネルに投稿（これは待機する）
+          await cachedLogChannel.send(llmMessage);
+
+          // TTS音声再生は非同期で実行（待機しない）
+          (async () => {
             const audioFilePath = await callTTSAPI(llmResponse);
             if (audioFilePath) {
               await playTTSAudio(audioFilePath);
             }
-          })();
-
-          // 両方の処理を待機
-          await Promise.all([logPromise, ttsPromise]);
+          })().catch((error) => {
+            console.error("[TTS] Error in TTS playback:", error);
+          });
 
           if (config.VERBOSE) {
             console.log(`[LLM] Response sent to channel for: ${transcript}`);
