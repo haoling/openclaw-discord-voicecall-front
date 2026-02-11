@@ -151,7 +151,7 @@ async function callTTSAPI(text: string): Promise<string | null> {
     }
 
     // Node.js Readable streamに変換して保存
-    await pipeline(response.body as any, fileStream);
+    await pipeline(response.body, fileStream);
 
     if (config.VERBOSE) {
       console.log(`[TTS] Audio saved to: ${tempFilePath}`);
