@@ -16,10 +16,10 @@
   dependencies:
     dayjs "^1.11.10"
 
-"@deepgram/sdk@^3.9.0":
-  version "3.13.0"
-  resolved "https://registry.yarnpkg.com/@deepgram/sdk/-/sdk-3.13.0.tgz#8e09feb35420a554e06917e87a3cff5e26c17504"
-  integrity sha512-VFN4gbyIDl5Bj0ApERq4QJHzO2AK4YOoL5Lfoy//q9531+UIzaKCNie4NkBM2Kn/UndHH7tIR335SH14e2r+Ag==
+"@deepgram/sdk@^4.11.3":
+  version "4.11.3"
+  resolved "https://registry.yarnpkg.com/@deepgram/sdk/-/sdk-4.11.3.tgz#7946d53d21d95200a9cb3298fb5709bedd08b621"
+  integrity sha512-7NujHlAX6ciBeYAkxkhE7LCZWy0JK3nvFsV2VwVZIUiFR40ykhep5fxYd7ZovM+PbNyCoM8GKNMHu9MeQ5/wTQ==
   dependencies:
     "@deepgram/captions" "^1.1.1"
     "@types/node" "^18.19.39"
