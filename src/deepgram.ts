@@ -114,7 +114,7 @@ export function createDeepgramStream(userId: string, username: string) {
       const state = userStates.get(userId);
       if (
         state &&
-        (event?.code === 1011 || event?.code === 1006 || event?.code === 1000)
+        (event?.code === 1011 || event?.code === 1006)
       ) {
         const now = Date.now();
         const timeSinceLastReconnect = now - state.lastReconnectTime;
