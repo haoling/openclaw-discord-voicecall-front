@@ -16,7 +16,8 @@ const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID!;
 const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const VERBOSE = process.env.VERBOSE === "true";
-const ENABLE_VAD = process.env.ENABLE_VAD !== "false"; // デフォルトはtrue
+const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
+const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -42,7 +43,8 @@ if (!DEEPGRAM_API_KEY) {
 // 起動時に環境変数の状態を出力
 console.log("=== 環境変数の状態 ===");
 console.log(`VERBOSE: ${VERBOSE}`);
-console.log(`ENABLE_VAD: ${ENABLE_VAD}`);
+console.log(`ENABLE_DEEPGRAM_VAD: ${ENABLE_DEEPGRAM_VAD} (Deepgramサーバー側のVAD)`);
+console.log(`ENABLE_LOCAL_VAD: ${ENABLE_LOCAL_VAD} (ローカル音量閾値ベースのVAD)`);
 console.log(`DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN ? "設定済み" : "未設定"}`);
 console.log(
   `DISCORD_LOG_CHANNEL_ID: ${DISCORD_LOG_CHANNEL_ID ? DISCORD_LOG_CHANNEL_ID : "未設定"}`
@@ -127,7 +129,7 @@ function createDeepgramStream(userId: string, username: string) {
   console.log(
     `[Deepgram] API Key check: ${DEEPGRAM_API_KEY ? `${DEEPGRAM_API_KEY.substring(0, 8)}...` : "NOT SET"}`
   );
-  console.log(`[Deepgram] VAD enabled: ${ENABLE_VAD}`);
+  console.log(`[Deepgram] Deepgram VAD enabled: ${ENABLE_DEEPGRAM_VAD}`);
 
   const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
   const deepgram = createClient(DEEPGRAM_API_KEY);
@@ -142,7 +144,7 @@ function createDeepgramStream(userId: string, username: string) {
     channels: 2,
     interim_results: true, // 中間結果も取得（より早く応答を得る）
     utterance_end_ms: 1500, // 1.5秒の無音で発話終了と判断
-    vad_events: ENABLE_VAD, // 音声活動検出イベントを有効化（環境変数で制御）
+    vad_events: ENABLE_DEEPGRAM_VAD, // Deepgram側のVADイベント（環境変数で制御）
     smart_format: true, // スマートフォーマット（句読点など）
     no_delay: true, // 遅延を最小化
   });
@@ -341,48 +343,68 @@ function listenToUser(userId: string, username: string, audioStream: any) {
       }
     }
 
-    // 音量レベルを計算（環境雑音を無視するため）
-    const samples = new Int16Array(
-      pcmData.buffer,
-      pcmData.byteOffset,
-      pcmData.length / 2
-    );
-    let sum = 0;
-    for (let i = 0; i < samples.length; i++) {
-      sum += Math.abs(samples[i]);
-    }
-    const averageVolume = sum / samples.length;
+    // ローカルVAD: 音量レベルを計算（環境雑音を無視するため）
+    let averageVolume = 0;
+    let shouldSendAudio = true; // デフォルトは送信する
 
-    // 音量閾値（環境雑音より大きい場合のみ発話と判断）
-    // 閾値を下げて、より多くの音声を検出できるようにする
-    const VOLUME_THRESHOLD = 200;
+    if (ENABLE_LOCAL_VAD) {
+      // ローカルVADが有効な場合、音量閾値で判断
+      const samples = new Int16Array(
+        pcmData.buffer,
+        pcmData.byteOffset,
+        pcmData.length / 2
+      );
+      let sum = 0;
+      for (let i = 0; i < samples.length; i++) {
+        sum += Math.abs(samples[i]);
+      }
+      averageVolume = sum / samples.length;
 
-    // VERBOSE モード：統計情報を収集
-    if (VERBOSE) {
-      state.totalSamples++;
-      if (averageVolume > VOLUME_THRESHOLD) {
-        state.activeSamples++;
+      // 音量閾値（環境雑音より大きい場合のみ発話と判断）
+      const VOLUME_THRESHOLD = 200;
+
+      // VERBOSE モード：統計情報を収集
+      if (VERBOSE) {
+        state.totalSamples++;
+        if (averageVolume > VOLUME_THRESHOLD) {
+          state.activeSamples++;
+        }
+
+        // 1秒ごとにログ出力
+        const now = Date.now();
+        if (now - state.lastVerboseLog >= 1000) {
+          const activePercentage =
+            state.totalSamples > 0
+              ? ((state.activeSamples / state.totalSamples) * 100).toFixed(1)
+              : "0.0";
+          console.log(
+            `[VERBOSE] ${username} | ローカルVAD: 有効 | 音量: ${averageVolume.toFixed(0)} | 閾値: ${VOLUME_THRESHOLD} | ` +
+              `音声検出: ${averageVolume > VOLUME_THRESHOLD ? "✓" : "✗"} | ` +
+              `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples})`
+          );
+          state.lastVerboseLog = now;
+          state.totalSamples = 0;
+          state.activeSamples = 0;
+        }
       }
 
-      // 1秒ごとにログ出力
-      const now = Date.now();
-      if (now - state.lastVerboseLog >= 1000) {
-        const activePercentage =
-          state.totalSamples > 0
-            ? ((state.activeSamples / state.totalSamples) * 100).toFixed(1)
-            : "0.0";
-        console.log(
-          `[VERBOSE] ${username} | 音量: ${averageVolume.toFixed(0)} | 閾値: ${VOLUME_THRESHOLD} | ` +
-            `音声検出: ${averageVolume > VOLUME_THRESHOLD ? "✓" : "✗"} | ` +
-            `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples})`
-        );
-        state.lastVerboseLog = now;
-        state.totalSamples = 0;
-        state.activeSamples = 0;
+      shouldSendAudio = averageVolume > VOLUME_THRESHOLD;
+    } else {
+      // ローカルVADが無効な場合、すべての音声をDeepgramに送信
+      if (VERBOSE) {
+        state.totalSamples++;
+        const now = Date.now();
+        if (now - state.lastVerboseLog >= 1000) {
+          console.log(
+            `[VERBOSE] ${username} | ローカルVAD: 無効 | すべての音声をDeepgramに送信中 (サンプル数: ${state.totalSamples})`
+          );
+          state.lastVerboseLog = now;
+          state.totalSamples = 0;
+        }
       }
     }
 
-    if (averageVolume > VOLUME_THRESHOLD) {
+    if (shouldSendAudio) {
       state.lastAudioTime = Date.now();
 
       // 発話開始を検出
@@ -425,8 +447,8 @@ function listenToUser(userId: string, username: string, audioStream: any) {
       // 無音タイマーをリセット
       resetSilenceTimer(userId);
     } else {
-      // 音量が閾値以下の場合、発話終了をチェック
-      if (state.isSpeaking && VERBOSE) {
+      // 音量が閾値以下の場合、発話終了をチェック（ローカルVAD有効時のみ）
+      if (ENABLE_LOCAL_VAD && state.isSpeaking && VERBOSE) {
         // 発話中から無音になった時のみログ出力
         const timeSinceLastAudio = Date.now() - state.lastAudioTime;
         if (timeSinceLastAudio > 500) {
