@@ -148,6 +148,17 @@ export async function sendTranscriptionToChannel(
         }
       } catch (error) {
         console.error("[LLM] Error processing and sending LLM response:", error);
+        // ログチャンネルにエラーを通知
+        try {
+          const timestamp = getJapaneseTimestamp();
+          const errorMessage = `❌ **LLMエラー** — ${timestamp}\nLLM処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`;
+          await cachedLogChannel.send(errorMessage);
+        } catch (sendError) {
+          console.error(
+            "[LLM] Failed to send error message to channel:",
+            sendError
+          );
+        }
       }
     })();
   } catch (error) {
