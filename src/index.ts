@@ -76,6 +76,8 @@ interface UserTranscriptionState {
   lastVerboseLog: number; // VERBOSE モード用：最後のログ出力時刻
   totalSamples: number; // VERBOSE モード用：処理したサンプル数
   activeSamples: number; // VERBOSE モード用：閾値を超えたサンプル数
+  reconnectAttempts: number; // Deepgram再接続試行回数
+  lastReconnectTime: number; // 最後の再接続時刻
 }
 
 const userStates = new Map<string, UserTranscriptionState>();
@@ -138,6 +140,8 @@ function createDeepgramStream(userId: string, username: string) {
     interim_results: true, // 中間結果も取得（より早く応答を得る）
     utterance_end_ms: 1500, // 1.5秒の無音で発話終了と判断
     vad_events: true, // 音声活動検出イベントを有効化
+    smart_format: true, // スマートフォーマット（句読点など）
+    no_delay: true, // 遅延を最小化
   });
 
   console.log(
@@ -151,6 +155,12 @@ function createDeepgramStream(userId: string, username: string) {
     );
     if (VERBOSE) {
       console.log(`[VERBOSE] ${username} | Deepgram接続完了、文字起こし開始可能`);
+    }
+
+    // 接続が成功したら再接続カウンターをリセット
+    const state = userStates.get(userId);
+    if (state) {
+      state.reconnectAttempts = 0;
     }
 
     // Openイベント内でTranscript, Error, Closeイベントを登録
@@ -202,6 +212,48 @@ function createDeepgramStream(userId: string, username: string) {
         reason: event?.reason,
         wasClean: event?.wasClean,
       });
+
+      // タイムアウトや予期しないクローズの場合は再接続を試みる
+      // code: 1011 はタイムアウト、1006 は異常クローズ
+      const state = userStates.get(userId);
+      if (
+        state &&
+        (event?.code === 1011 || event?.code === 1006 || event?.code === 1000)
+      ) {
+        const now = Date.now();
+        const timeSinceLastReconnect = now - state.lastReconnectTime;
+
+        // 再接続回数が5回未満で、前回の再接続から5秒以上経過している場合のみ再接続
+        if (state.reconnectAttempts < 5 && timeSinceLastReconnect > 5000) {
+          console.log(
+            `[Deepgram] Attempting to reconnect for ${username} (close code: ${event?.code}, attempt: ${state.reconnectAttempts + 1}/5)...`
+          );
+
+          // 少し待ってから再接続（exponential backoff）
+          const delay = Math.min(1000 * Math.pow(2, state.reconnectAttempts), 10000);
+          setTimeout(() => {
+            const currentState = userStates.get(userId);
+            if (currentState) {
+              // 新しいDeepgram接続を作成
+              const newConnection = createDeepgramStream(userId, username);
+              currentState.deepgramStream = newConnection;
+              currentState.reconnectAttempts++;
+              currentState.lastReconnectTime = Date.now();
+              console.log(
+                `[Deepgram] Reconnection initiated for ${username} (delay: ${delay}ms)`
+              );
+            }
+          }, delay);
+        } else if (state.reconnectAttempts >= 5) {
+          console.error(
+            `[Deepgram] Max reconnection attempts reached for ${username}`
+          );
+        } else {
+          console.log(
+            `[Deepgram] Skipping reconnection for ${username} (too soon since last attempt)`
+          );
+        }
+      }
     });
   });
 
@@ -251,6 +303,8 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     lastVerboseLog: Date.now(),
     totalSamples: 0,
     activeSamples: 0,
+    reconnectAttempts: 0,
+    lastReconnectTime: 0,
   };
   userStates.set(userId, state);
 
