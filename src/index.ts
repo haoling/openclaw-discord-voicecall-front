@@ -38,6 +38,21 @@ if (!DEEPGRAM_API_KEY) {
   process.exit(1);
 }
 
+// 起動時に環境変数の状態を出力
+console.log("=== 環境変数の状態 ===");
+console.log(`VERBOSE: ${VERBOSE}`);
+console.log(`DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN ? "設定済み" : "未設定"}`);
+console.log(
+  `DISCORD_LOG_CHANNEL_ID: ${DISCORD_LOG_CHANNEL_ID ? DISCORD_LOG_CHANNEL_ID : "未設定"}`
+);
+console.log(
+  `DISCORD_VOICE_CHANNEL_ID: ${DISCORD_VOICE_CHANNEL_ID ? DISCORD_VOICE_CHANNEL_ID : "未設定"}`
+);
+console.log(
+  `DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY ? `${DEEPGRAM_API_KEY.substring(0, 8)}...` : "未設定"}`
+);
+console.log("====================");
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -130,18 +145,30 @@ function createDeepgramStream(userId: string, username: string) {
   // 公式例に従い、Openイベント内で他のイベントリスナーを登録
   dgConnection.on(LiveTranscriptionEvents.Open, () => {
     console.log(
-      `[Deepgram] Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
+      `[Deepgram] ✓ Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
     );
+    if (VERBOSE) {
+      console.log(`[VERBOSE] ${username} | Deepgram接続完了、文字起こし開始可能`);
+    }
 
     // Openイベント内でTranscript, Error, Closeイベントを登録
     dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
       const transcript = data.channel?.alternatives?.[0]?.transcript;
+      if (VERBOSE) {
+        console.log(
+          `[VERBOSE] ${username} | Deepgramからの応答:`,
+          JSON.stringify(data, null, 2)
+        );
+      }
       if (transcript && transcript.trim()) {
+        console.log(`[Deepgram] Transcript received for ${username}: "${transcript}"`);
         const state = userStates.get(userId);
         if (state) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
         }
+      } else if (VERBOSE) {
+        console.log(`[VERBOSE] ${username} | 空の文字起こし結果を受信`);
       }
     });
 
@@ -227,7 +254,22 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     }
   });
 
+  // 最初のデータ受信をログ出力
+  let firstDataReceived = false;
+
   opusDecoder.on("data", (pcmData: Buffer) => {
+    if (!firstDataReceived) {
+      firstDataReceived = true;
+      console.log(
+        `[Audio] First PCM data received for ${username} (size: ${pcmData.length} bytes)`
+      );
+      if (VERBOSE) {
+        console.log(
+          `[VERBOSE] ${username} | 音声データ受信開始 (サンプリングレート: 48000Hz, チャンネル数: 2)`
+        );
+      }
+    }
+
     // 音量レベルを計算（環境雑音を無視するため）
     const samples = new Int16Array(
       pcmData.buffer,
@@ -270,18 +312,35 @@ function listenToUser(userId: string, username: string, audioStream: any) {
 
     if (averageVolume > VOLUME_THRESHOLD) {
       state.lastAudioTime = Date.now();
-      state.isSpeaking = true;
+
+      // 発話開始を検出
+      if (!state.isSpeaking) {
+        state.isSpeaking = true;
+        if (VERBOSE) {
+          console.log(`[VERBOSE] ${username} | 発話開始を検出`);
+        }
+      }
 
       // Deepgramに音声データを送信
       try {
         const readyState = deepgramStream.getReadyState();
         if (readyState === 1) {
           deepgramStream.send(pcmData);
-          if (VERBOSE && !state.isSpeaking) {
-            console.log(`[VERBOSE] ${username} | Deepgramへ送信開始`);
+          if (VERBOSE) {
+            // 10サンプルに1回だけログ出力（ログの洪水を避ける）
+            if (state.totalSamples % 10 === 0) {
+              console.log(
+                `[VERBOSE] ${username} | Deepgramへ送信中 (ReadyState: ${readyState}, サンプルサイズ: ${pcmData.length}バイト)`
+              );
+            }
           }
         } else if (readyState === 0) {
-          // 接続中なので待機（ログを出さない）
+          // 接続中なので待機
+          if (VERBOSE && state.totalSamples % 50 === 0) {
+            console.log(
+              `[VERBOSE] ${username} | Deepgram接続待機中 (ReadyState: ${readyState})`
+            );
+          }
         } else {
           console.log(
             `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
@@ -293,6 +352,16 @@ function listenToUser(userId: string, username: string, audioStream: any) {
 
       // 無音タイマーをリセット
       resetSilenceTimer(userId);
+    } else {
+      // 音量が閾値以下の場合、発話終了をチェック
+      if (state.isSpeaking && VERBOSE) {
+        // 発話中から無音になった時のみログ出力
+        const timeSinceLastAudio = Date.now() - state.lastAudioTime;
+        if (timeSinceLastAudio > 500) {
+          // 500ms以上無音
+          console.log(`[VERBOSE] ${username} | 無音期間: ${timeSinceLastAudio}ms`);
+        }
+      }
     }
   });
 
@@ -339,11 +408,13 @@ function cleanupUserState(userId: string) {
  */
 async function connectToVoiceChannel() {
   try {
+    console.log(`[Voice] Fetching voice channel: ${DISCORD_VOICE_CHANNEL_ID}`);
     const channel = await client.channels.fetch(DISCORD_VOICE_CHANNEL_ID);
     if (!channel || !channel.isVoiceBased()) {
       throw new Error("Invalid voice channel");
     }
 
+    console.log(`[Voice] Joining voice channel: ${channel.name}`);
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
@@ -352,30 +423,66 @@ async function connectToVoiceChannel() {
       selfMute: true,
     });
 
-    // 接続が確立されるまで待機
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-    console.log(`[Voice] Connected to voice channel: ${channel.name}`);
+    console.log(
+      `[Voice] Waiting for connection to be ready (timeout: 60s)...`
+    );
+    console.log(
+      `[Voice] Current state: ${connection.state.status}`
+    );
+
+    // 接続が確立されるまで待機（タイムアウトを60秒に延長）
+    await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
+    console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
 
     voiceConnection = connection;
+
+    // 接続状態の変化をログ出力
+    connection.on("stateChange", (oldState, newState) => {
+      console.log(
+        `[Voice] State change: ${oldState.status} -> ${newState.status}`
+      );
+      if (VERBOSE) {
+        console.log(`[VERBOSE] Voice connection state details:`, {
+          old: oldState,
+          new: newState,
+        });
+      }
+    });
 
     // 音声受信を開始
     const receiver = connection.receiver;
 
+    console.log(`[Voice] Voice receiver initialized, waiting for users to speak...`);
+
     receiver.speaking.on("start", (userId) => {
+      console.log(`[Voice] Speaking event detected for user ID: ${userId}`);
+
       // ユーザーが話し始めたら音声ストリームをリッスン
       const user = client.users.cache.get(userId);
-      if (!user || user.bot) return; // ボットの音声は無視
+      if (!user) {
+        console.log(`[Voice] User not found in cache: ${userId}`);
+        return;
+      }
+
+      if (user.bot) {
+        console.log(`[Voice] Ignoring bot user: ${user.username}`);
+        return;
+      }
 
       const username = user.username;
+      console.log(`[Voice] User ${username} started speaking`);
 
       // 既にリスニング中でなければ開始
       if (!userStates.has(userId)) {
+        console.log(`[Voice] Starting new audio stream for ${username}`);
         const audioStream = receiver.subscribe(userId, {
           end: {
             behavior: EndBehaviorType.Manual,
           },
         });
         listenToUser(userId, username, audioStream);
+      } else {
+        console.log(`[Voice] Already listening to ${username}`);
       }
     });
 
