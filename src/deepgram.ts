@@ -108,6 +108,15 @@ export function createDeepgramStream(userId: string, username: string) {
               state.dynamicVolumeThreshold = elevatedThreshold;
               state.thresholdElevationTime = Date.now();
 
+              // 無音検出を即座に開始するため、silenceStartTimeを設定
+              // speech_final受信時点で発話は終了しているため、ここから無音として扱う
+              if (!state.silenceStartTime) {
+                state.silenceStartTime = Date.now();
+                if (config.VERBOSE) {
+                  console.log(`[VERBOSE] ${username} | speech_final検出時に無音開始時刻を設定`);
+                }
+              }
+
               if (config.VERBOSE) {
                 console.log(
                   `[VERBOSE] ${username} | speech_final検出\n` +
@@ -119,7 +128,13 @@ export function createDeepgramStream(userId: string, username: string) {
               }
             } else {
               // 統計がない場合は通常のしきい値を維持
-              if (config.VERBOSE) {
+              // それでも無音検出を開始するため、silenceStartTimeを設定
+              if (!state.silenceStartTime) {
+                state.silenceStartTime = Date.now();
+                if (config.VERBOSE) {
+                  console.log(`[VERBOSE] ${username} | speech_final検出 (統計なし、しきい値維持) - 無音開始時刻を設定`);
+                }
+              } else if (config.VERBOSE) {
                 console.log(`[VERBOSE] ${username} | speech_final検出 (統計なし、しきい値維持)`);
               }
             }
