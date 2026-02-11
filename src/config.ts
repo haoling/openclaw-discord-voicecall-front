@@ -3,6 +3,8 @@ const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const DISCORD_LOG_CHANNEL_ID = process.env.DISCORD_LOG_CHANNEL_ID!;
 const DISCORD_VOICE_CHANNEL_ID = process.env.DISCORD_VOICE_CHANNEL_ID!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
+const CHAT_COMPLETION_ENDPOINT_URL = process.env.CHAT_COMPLETION_ENDPOINT_URL || "";
+const CHAT_COMPLETION_APIKEY = process.env.CHAT_COMPLETION_APIKEY || "";
 const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
@@ -47,6 +49,12 @@ console.log(
 console.log(
   `DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY ? `${DEEPGRAM_API_KEY.substring(0, 8)}...` : "未設定"}`
 );
+console.log(
+  `CHAT_COMPLETION_ENDPOINT_URL: ${CHAT_COMPLETION_ENDPOINT_URL ? CHAT_COMPLETION_ENDPOINT_URL : "未設定"}`
+);
+console.log(
+  `CHAT_COMPLETION_APIKEY: ${CHAT_COMPLETION_APIKEY ? `${CHAT_COMPLETION_APIKEY.substring(0, 8)}...` : "未設定"}`
+);
 console.log("====================");
 
 export const config = {
@@ -54,6 +62,8 @@ export const config = {
   DISCORD_LOG_CHANNEL_ID,
   DISCORD_VOICE_CHANNEL_ID,
   DEEPGRAM_API_KEY,
+  CHAT_COMPLETION_ENDPOINT_URL,
+  CHAT_COMPLETION_APIKEY,
   VERBOSE,
   ENABLE_DEEPGRAM_VAD,
   ENABLE_LOCAL_VAD,
