@@ -9,6 +9,9 @@ import {
 } from "@discordjs/voice";
 import * as path from "path";
 import * as fs from "fs";
+import { pipeline } from "stream/promises";
+import { createWriteStream } from "fs";
+import { tmpdir } from "os";
 
 /**
  * OpenAI chat completion互換APIのレスポンス型
@@ -93,6 +96,140 @@ async function playSoundEffect(soundFilePath: string): Promise<void> {
   } finally {
     subscription?.unsubscribe();
     audioPlayer.stop();
+  }
+}
+
+/**
+ * OpenAI互換のTTS APIを呼び出して音声データを取得
+ *
+ * @param text 音声合成するテキスト
+ * @returns 音声ファイルのパス（一時ファイル）、エラー時はnull
+ */
+async function callTTSAPI(text: string): Promise<string | null> {
+  // TTS設定が不完全な場合はスキップ
+  if (!config.TTS_ENDPOINT_URL || !config.TTS_MODEL || !config.TTS_VOICE) {
+    if (config.VERBOSE) {
+      console.log("[TTS] TTS endpoint, model, or voice not configured, skipping TTS");
+    }
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
+
+  try {
+    if (config.VERBOSE) {
+      console.log(`[TTS] Calling TTS API with model: ${config.TTS_MODEL}, voice: ${config.TTS_VOICE}, speed: ${config.TTS_SPEED}`);
+    }
+
+    const response = await fetch(config.TTS_ENDPOINT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.TTS_MODEL,
+        voice: config.TTS_VOICE,
+        input: text,
+        speed: config.TTS_SPEED,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.error(`[TTS] TTS API request failed with status ${response.status}`);
+      return null;
+    }
+
+    // 音声データを一時ファイルに保存
+    const tempFilePath = path.join(tmpdir(), `tts-${Date.now()}.mp3`);
+    const fileStream = createWriteStream(tempFilePath);
+
+    if (!response.body) {
+      console.error("[TTS] No response body from TTS API");
+      return null;
+    }
+
+    // Node.js Readable streamに変換して保存
+    await pipeline(response.body as any, fileStream);
+
+    if (config.VERBOSE) {
+      console.log(`[TTS] Audio saved to: ${tempFilePath}`);
+    }
+
+    return tempFilePath;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[TTS] TTS request timed out after 30 seconds");
+    } else {
+      console.error("[TTS] Error calling TTS API:", error);
+    }
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * TTS音声をボイスチャンネルで再生
+ *
+ * @param audioFilePath 再生する音声ファイルのパス
+ */
+async function playTTSAudio(audioFilePath: string): Promise<void> {
+  const connection = getVoiceConnection();
+
+  if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) {
+    if (config.VERBOSE) {
+      console.log("[TTS] ボイス接続が確立されていないため、TTS音声の再生をスキップします");
+    }
+    // 一時ファイルを削除
+    try {
+      fs.unlinkSync(audioFilePath);
+    } catch (error) {
+      console.error("[TTS] Failed to delete temp audio file:", error);
+    }
+    return;
+  }
+
+  const audioPlayer = createAudioPlayer();
+  const subscription = connection.subscribe(audioPlayer);
+
+  audioPlayer.on("error", (error) => {
+    console.error("[TTS] TTS音声の再生中にエラーが発生しました:", error);
+  });
+
+  try {
+    const resource = createAudioResource(audioFilePath);
+    audioPlayer.play(resource);
+
+    if (config.VERBOSE) {
+      console.log(`[TTS] TTS音声を再生中: ${audioFilePath}`);
+    }
+
+    // 再生完了を待機（最大60秒）
+    await entersState(audioPlayer, AudioPlayerStatus.Idle, 60_000);
+
+    if (config.VERBOSE) {
+      console.log("[TTS] TTS音声の再生が完了しました");
+    }
+  } catch (error) {
+    if (config.VERBOSE) {
+      console.log("[TTS] TTS音声の再生がタイムアウトまたは失敗しました");
+    }
+    console.error("[TTS] TTS音声の再生処理でエラー:", error);
+  } finally {
+    subscription?.unsubscribe();
+    audioPlayer.stop();
+
+    // 一時ファイルを削除
+    try {
+      fs.unlinkSync(audioFilePath);
+      if (config.VERBOSE) {
+        console.log(`[TTS] 一時ファイルを削除: ${audioFilePath}`);
+      }
+    } catch (error) {
+      console.error("[TTS] Failed to delete temp audio file:", error);
+    }
   }
 }
 
@@ -215,7 +352,19 @@ export async function sendTranscriptionToChannel(
         if (llmResponse) {
           const llmTimestamp = getJapaneseTimestamp();
           const llmMessage = `🤖 **LLM応答** — ${llmTimestamp}\n${llmResponse}`;
-          await cachedLogChannel.send(llmMessage);
+
+          // ログチャンネルに投稿とTTS音声再生を並列実行
+          const logPromise = cachedLogChannel.send(llmMessage);
+          const ttsPromise = (async () => {
+            const audioFilePath = await callTTSAPI(llmResponse);
+            if (audioFilePath) {
+              await playTTSAudio(audioFilePath);
+            }
+          })();
+
+          // 両方の処理を待機
+          await Promise.all([logPromise, ttsPromise]);
+
           if (config.VERBOSE) {
             console.log(`[LLM] Response sent to channel for: ${transcript}`);
           }
