@@ -31,6 +31,32 @@ function resetSilenceTimer(userId: string) {
 }
 
 /**
+ * 必要に応じてキープアライブメッセージを送信
+ */
+function sendKeepAliveIfNeeded(state: UserTranscriptionState, username: string) {
+  const timeSinceLastKeepAlive = Date.now() - state.lastKeepAliveTime;
+  if (timeSinceLastKeepAlive > config.KEEP_ALIVE_INTERVAL) {
+    try {
+      const readyState = state.deepgramStream.getReadyState();
+      if (readyState === 1) {
+        state.deepgramStream.send(JSON.stringify({ type: "KeepAlive" }));
+        state.lastKeepAliveTime = Date.now();
+        if (config.VERBOSE) {
+          console.log(
+            `[VERBOSE] ${username} | キープアライブ送信 (最終送信から${timeSinceLastKeepAlive}ms経過)`
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[Deepgram] Error sending keepalive for ${username}:`,
+        error
+      );
+    }
+  }
+}
+
+/**
  * ユーザーの音声ストリームをリッスン
  */
 export function listenToUser(userId: string, username: string, audioStream: import("@discordjs/voice").AudioReceiveStream) {
@@ -290,28 +316,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           }
         } else {
           // 発話していない無音時のキープアライブ
-          const timeSinceLastKeepAlive = Date.now() - state.lastKeepAliveTime;
-          if (timeSinceLastKeepAlive > 5000) {
-            // 5秒ごとにキープアライブを送信
-            try {
-              const readyState = state.deepgramStream.getReadyState();
-              if (readyState === 1) {
-                // KeepAliveメッセージを送信（空のJSON）
-                state.deepgramStream.send(JSON.stringify({ type: "KeepAlive" }));
-                state.lastKeepAliveTime = Date.now();
-                if (config.VERBOSE) {
-                  console.log(
-                    `[VERBOSE] ${username} | キープアライブ送信 (最終送信から${timeSinceLastKeepAlive}ms経過)`
-                  );
-                }
-              }
-            } catch (error) {
-              console.error(
-                `[Deepgram] Error sending keepalive for ${username}:`,
-                error
-              );
-            }
-          }
+          sendKeepAliveIfNeeded(state, username);
         }
       }
     } else {
@@ -373,31 +378,8 @@ export function listenToUser(userId: string, username: string, audioStream: impo
           }
         }
 
-        // ローカルVAD無効時のキープアライブ
-        if (!config.ENABLE_LOCAL_VAD) {
-          const timeSinceLastKeepAlive = Date.now() - state.lastKeepAliveTime;
-          if (timeSinceLastKeepAlive > 5000) {
-            // 5秒ごとにキープアライブを送信
-            try {
-              const readyState = state.deepgramStream.getReadyState();
-              if (readyState === 1) {
-                // KeepAliveメッセージを送信（空のJSON）
-                state.deepgramStream.send(JSON.stringify({ type: "KeepAlive" }));
-                state.lastKeepAliveTime = Date.now();
-                if (config.VERBOSE) {
-                  console.log(
-                    `[VERBOSE] ${username} | キープアライブ送信 (最終送信から${timeSinceLastKeepAlive}ms経過)`
-                  );
-                }
-              }
-            } catch (error) {
-              console.error(
-                `[Deepgram] Error sending keepalive for ${username}:`,
-                error
-              );
-            }
-          }
-        }
+        // キープアライブ送信
+        sendKeepAliveIfNeeded(state, username);
       }
     }
   });
