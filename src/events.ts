@@ -72,7 +72,7 @@ export function registerEventHandlers() {
           const threadName = `ボイスログ ${timestamp}`;
           const thread = await cachedLogChannel.threads.create({
             name: threadName,
-            autoArchiveDuration: 60, // 60分後に自動アーカイブ
+            autoArchiveDuration: config.THREAD_AUTO_ARCHIVE_DURATION, // 自動アーカイブ時間（分）
             type: ChannelType.PublicThread,
             reason: "ボイスチャンネルセッション開始"
           });
