@@ -20,6 +20,7 @@ const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デ�
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
 const BASE_SILENCE_TIME = 1500; // 無音判定の基準時間（ミリ秒）
 const VOLUME_THRESHOLD = 200; // 音量閾値（環境雑音より大きい場合のみ発話と判断）
+const AUDIO_BUFFER_SIZE = 15; // オーディオバッファサイズ（約300ms分、20msフレーム × 15）
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -87,6 +88,7 @@ interface UserTranscriptionState {
   lastSpeechFinal: boolean | null; // Deepgramから最後に受信したspeech_finalの値
   silenceStartTime: number | null; // 無音開始時刻
   isSendingToDeepgram: boolean; // Deepgramに音声データを送信中かどうか
+  audioBuffer: Buffer[]; // 発話の立ち上がり部分を捉えるためのバッファ
 }
 
 const userStates = new Map<string, UserTranscriptionState>();
@@ -329,6 +331,7 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     lastSpeechFinal: null,
     silenceStartTime: null,
     isSendingToDeepgram: false,
+    audioBuffer: [],
   };
   userStates.set(userId, state);
 
@@ -422,7 +425,16 @@ function listenToUser(userId: string, username: string, audioStream: any) {
 
     // 音声データ送信ロジック
     if (ENABLE_LOCAL_VAD) {
-      // ローカルVAD有効時: 新しいロジック
+      // ローカルVAD有効時: バッファリングと新しいロジック
+
+      // 常にバッファにpcmDataを追加（発話の立ち上がり部分を捉えるため）
+      if (!state.isSendingToDeepgram) {
+        state.audioBuffer.push(pcmData);
+        if (state.audioBuffer.length > AUDIO_BUFFER_SIZE) {
+          state.audioBuffer.shift(); // 古いデータを削除
+        }
+      }
+
       if (averageVolume > VOLUME_THRESHOLD) {
         // 音声検出
         if (!state.isSpeaking) {
@@ -436,9 +448,25 @@ function listenToUser(userId: string, username: string, audioStream: any) {
         if (!state.isSendingToDeepgram) {
           // 新しい発話開始、Deepgramへの送信を開始
           state.isSendingToDeepgram = true;
-          if (VERBOSE) {
-            console.log(
-              `[VERBOSE] ${username} | 新しい発話開始、Deepgramへの送信を開始`
+
+          // バッファの内容を先に送信（発話の立ち上がり部分を含める）
+          try {
+            const readyState = deepgramStream.getReadyState();
+            if (readyState === 1) {
+              if (VERBOSE) {
+                console.log(
+                  `[VERBOSE] ${username} | 新しい発話開始、バッファから${state.audioBuffer.length}フレームを送信`
+                );
+              }
+              for (const bufferedData of state.audioBuffer) {
+                deepgramStream.send(bufferedData);
+              }
+              state.audioBuffer = []; // バッファをクリア
+            }
+          } catch (error) {
+            console.error(
+              `[Deepgram] Error sending buffered data for ${username}:`,
+              error
             );
           }
         }
@@ -498,6 +526,7 @@ function listenToUser(userId: string, username: string, audioStream: any) {
             state.isSendingToDeepgram = false;
             state.isSpeaking = false;
             state.silenceStartTime = null;
+            state.audioBuffer = []; // バッファをクリア
           } else if (
             state.lastSpeechFinal === true &&
             silenceDuration >= BASE_SILENCE_TIME
@@ -518,6 +547,7 @@ function listenToUser(userId: string, username: string, audioStream: any) {
             state.isSpeaking = false;
             state.isSendingToDeepgram = false;
             state.silenceStartTime = null;
+            state.audioBuffer = []; // バッファをクリア
           } else if (state.isSendingToDeepgram) {
             // まだ無音時間が足りない → 送信継続
             try {
