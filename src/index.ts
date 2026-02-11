@@ -872,7 +872,8 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 });
 
 // プロセス終了時のクリーンアップ
-process.on("SIGINT", () => {
+// グレースフルシャットダウン処理
+function performGracefulShutdown() {
   console.log("\n[Shutdown] Cleaning up...");
 
   // 全ユーザーの状態をクリーンアップ
@@ -888,25 +889,11 @@ process.on("SIGINT", () => {
   // Discordクライアントを終了
   client.destroy();
   process.exit(0);
-});
+}
 
-process.on("SIGTERM", () => {
-  console.log("\n[Shutdown] Cleaning up...");
+process.on("SIGINT", performGracefulShutdown);
 
-  // 全ユーザーの状態をクリーンアップ
-  for (const userId of userStates.keys()) {
-    cleanupUserState(userId);
-  }
-
-  // ボイス接続を切断
-  if (voiceConnection) {
-    voiceConnection.destroy();
-  }
-
-  // Discordクライアントを終了
-  client.destroy();
-  process.exit(0);
-});
+process.on("SIGTERM", performGracefulShutdown);
 
 // メイン処理を非同期関数でラップ
 (async () => {
