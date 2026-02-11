@@ -458,19 +458,8 @@ function listenToUser(userId: string, username: string, audioStream: any) {
           // 新しい発話開始、Deepgramへの送信を開始
           state.isSendingToDeepgram = true;
 
-          // 前の発話の未送信テキストがある場合、先に送信
-          if (state.currentTranscript.trim()) {
-            if (VERBOSE) {
-              console.log(
-                `[VERBOSE] ${username} | 未送信のテキストを先に送信: "${state.currentTranscript.trim()}"`
-              );
-            }
-            sendTranscriptionToChannel(
-              state.username,
-              state.currentTranscript.trim()
-            );
-          }
-          state.currentTranscript = ""; // 新しい発話用にクリア
+          // 前の発話の未送信テキストは送信せず、継続して蓄積する
+          // （無音検出で基準時間経過したときに送信される）
 
           // バッファの内容を先に送信（発話の立ち上がり部分を含める）
           try {
@@ -536,29 +525,13 @@ function listenToUser(userId: string, username: string, audioStream: any) {
 
           const silenceDuration = Date.now() - state.silenceStartTime;
 
-          if (
-            state.lastSpeechFinal === false &&
-            silenceDuration >= BASE_SILENCE_TIME * 3
-          ) {
-            // speech_final: false で 3倍の無音 → 送信停止
-            if (VERBOSE) {
-              console.log(
-                `[VERBOSE] ${username} | speech_final=false + 無音${silenceDuration}ms → Deepgram送信停止`
-              );
-            }
-            state.isSendingToDeepgram = false;
-            state.isSpeaking = false;
-            state.silenceStartTime = null;
-            state.audioBuffer = []; // バッファをクリア
-          } else if (
-            state.lastSpeechFinal === true &&
-            silenceDuration >= BASE_SILENCE_TIME
-          ) {
-            // speech_final: true で 1倍の無音 → ログ送信
+          // speech_finalの値に関わらず、BASE_SILENCE_TIME経過でログ送信
+          if (silenceDuration >= BASE_SILENCE_TIME) {
+            // 無音が基準時間続いた → ログ送信
             if (state.currentTranscript.trim()) {
               if (VERBOSE) {
                 console.log(
-                  `[VERBOSE] ${username} | speech_final=true + 無音${silenceDuration}ms → ログ送信`
+                  `[VERBOSE] ${username} | 無音${silenceDuration}ms経過 → ログ送信: "${state.currentTranscript.trim()}"`
                 );
               }
               sendTranscriptionToChannel(
