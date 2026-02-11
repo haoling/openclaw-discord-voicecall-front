@@ -366,6 +366,12 @@ export function listenToUser(userId: string, username: string, audioStream: impo
                 error
               );
             }
+
+            // 無音検出中もキープアライブを送信（Deepgramタイムアウト防止）
+            sendKeepAliveIfNeeded(state, username);
+          } else {
+            // isSendingToDeepgramがfalseの場合もキープアライブを送信
+            sendKeepAliveIfNeeded(state, username);
           }
         } else {
           // 発話していない無音時のキープアライブ
