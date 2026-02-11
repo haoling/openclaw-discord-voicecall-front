@@ -1,4 +1,3 @@
-import { pipeline } from "stream";
 import * as prism from "prism-media";
 import { config } from "./config";
 import { userStates } from "./state";
@@ -93,23 +92,22 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     frameSize: 960,
   });
 
-  // 音声データをDeepgramに送信
-  pipeline(audioStream, opusDecoder, (err) => {
-    if (err) {
-      console.error(`[Audio] Pipeline error for ${username}:`, err);
-    }
-  });
+  // 音声ストリームをOpusデコーダーに接続
+  // pipelineではなくpipeを使用することで、個別パケットのデコードエラーでストリーム全体が停止しないようにする
+  audioStream.pipe(opusDecoder);
 
   // 最初のデータ受信をログ出力
   let firstDataReceived = false;
 
+  // Opusデコーダーのエラーハンドリング
   opusDecoder.on("error", (error: any) => {
     // Opusデコードエラーは個別のパケットの問題なので、ログ出力のみで継続
     // モバイル版Discordからの接続時に不正なパケットが送信されることがあるため
     if (config.VERBOSE) {
-      console.log(`[Audio] Opus decode error for ${username} (continuing):`, error.message);
+      console.log(`[Audio] Opus decode error for ${username} (ignoring packet):`, error.message);
     }
-    // ストリーム全体をクリーンアップしない
+    // デコードに失敗したパケットは破棄し、ストリームは継続
+    // エラーイベントをキャッチすることで、ストリームが停止しないようにする
   });
 
   opusDecoder.on("data", (pcmData: Buffer) => {
@@ -406,24 +404,26 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     }
   });
 
-  audioStream.on("end", () => {
-    console.log(`[Audio] Stream ended for ${username}`);
-    cleanupUserState(userId);
-  });
-
+  // audioStreamのエラーハンドリング
   audioStream.on("error", (error: any) => {
     // Opusデコードエラーの場合は、個別のパケットの問題なのでクリーンアップしない
     // モバイル版Discordからの接続時に不正なパケットが送信されることがある
     if (error.message && error.message.includes("Decode error")) {
       if (config.VERBOSE) {
-        console.log(`[Audio] Stream decode error for ${username} (ignoring):`, error.message);
+        console.log(`[Audio] Stream decode error for ${username} (ignoring packet):`, error.message);
       }
-      // ストリームは継続
+      // デコードに失敗したパケットは破棄し、ストリームは継続
       return;
     }
 
     // その他のエラーの場合はクリーンアップ
     console.error(`[Audio] Stream error for ${username}:`, error);
+    cleanupUserState(userId);
+  });
+
+  // audioStreamの終了イベント
+  audioStream.on("end", () => {
+    console.log(`[Audio] Stream ended for ${username}`);
     cleanupUserState(userId);
   });
 }
