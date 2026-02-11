@@ -8,6 +8,7 @@ import {
 } from "@discordjs/voice";
 import { pipeline } from "stream";
 import * as prism from "prism-media";
+import * as sodium from "libsodium-wrappers";
 
 // 環境変数の読み込み
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
@@ -451,7 +452,15 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-client.login(DISCORD_BOT_TOKEN).catch((error) => {
-  console.error("Failed to log in:", error);
+// メイン処理を非同期関数でラップ
+(async () => {
+  // libsodiumを初期化（音声接続の暗号化に必要）
+  await sodium.ready;
+  console.log("[Init] libsodium initialized");
+
+  // Discordクライアントにログイン
+  await client.login(DISCORD_BOT_TOKEN);
+})().catch((error) => {
+  console.error("Failed to start bot:", error);
   process.exit(1);
 });
