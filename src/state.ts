@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, type TextChannel } from "discord.js";
+import { Client, GatewayIntentBits, type TextChannel, type ThreadChannel } from "discord.js";
 import type { VoiceConnection } from "@discordjs/voice";
 import type { UserTranscriptionState } from "./types";
 
@@ -33,4 +33,15 @@ export function getVoiceConnection(): VoiceConnection | null {
 
 export function setVoiceConnection(connection: VoiceConnection | null): void {
   _voiceConnection = connection;
+}
+
+// アクティブなスレッド（ボイスログ用）
+let _activeThread: ThreadChannel | null = null;
+
+export function getActiveThread(): ThreadChannel | null {
+  return _activeThread;
+}
+
+export function setActiveThread(thread: ThreadChannel | null): void {
+  _activeThread = thread;
 }

@@ -19,6 +19,7 @@ const VOLUME_THRESHOLD = parseInt(process.env.VOLUME_THRESHOLD || "150", 10); //
 const AUDIO_BUFFER_SIZE = 30; // オーディオバッファサイズ（約600ms分、20msフレーム × 30）
 const KEEP_ALIVE_INTERVAL = 5000; // Deepgramキープアライブ送信間隔（5秒）
 const SOUND_EFFECT_PATH = process.env.SOUND_EFFECT_PATH || "assets/sounds/pin1.mp3"; // 効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/pin1.mp3）
+const THREAD_AUTO_ARCHIVE_DURATION = 60; // スレッド自動アーカイブ時間（分）
 
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
@@ -103,4 +104,5 @@ export const config = {
   AUDIO_BUFFER_SIZE,
   KEEP_ALIVE_INTERVAL,
   SOUND_EFFECT_PATH,
+  THREAD_AUTO_ARCHIVE_DURATION,
 } as const;

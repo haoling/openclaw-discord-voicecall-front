@@ -1,6 +1,6 @@
-import { TextChannel } from "discord.js";
+import { TextChannel, ChannelType } from "discord.js";
 import { config } from "./config";
-import { client, setCachedLogChannel, getCachedLogChannel } from "./state";
+import { client, setCachedLogChannel, getCachedLogChannel, setActiveThread, getActiveThread } from "./state";
 import { getJapaneseTimestamp } from "./utils";
 import { connectToVoiceChannel } from "./voice";
 import { cleanupUserState } from "./audio";
@@ -59,9 +59,27 @@ export function registerEventHandlers() {
       // イベントタイプに基づいてメッセージ内容を決定
       let message: string | null = null;
       let consoleLog: string | null = null;
+      let shouldClearThread = false; // メッセージ送信後にスレッドをクリアするかどうか
 
       // ボイスチャンネルに参加した場合
       if (!oldState.channel && newState.channel) {
+        // 参加後の非BOTメンバー数を確認
+        const afterCount = newState.channel.members.filter(m => !m.user.bot).size;
+
+        // このユーザーが参加したことで非BOTメンバーが1人になり、かつアクティブなスレッドがない場合にスレッドを作成
+        // これにより、複数人が同時に参加した場合の競合状態を防ぐ
+        if (afterCount === 1 && !getActiveThread()) {
+          const threadName = `ボイスログ ${timestamp}`;
+          const thread = await cachedLogChannel.threads.create({
+            name: threadName,
+            autoArchiveDuration: config.THREAD_AUTO_ARCHIVE_DURATION, // 自動アーカイブ時間（分）
+            type: ChannelType.PublicThread,
+            reason: "ボイスチャンネルセッション開始"
+          });
+          setActiveThread(thread);
+          console.log(`New thread created: ${threadName}`);
+        }
+
         message = `🔊 **ボイスチャンネル参加** — ${timestamp}\n👤 **ユーザー:** ${member.user.tag}\n📢 **チャンネル:** ${newState.channel.name}`;
         consoleLog = `${member.user.tag} joined ${newState.channel.name}`;
       }
@@ -72,6 +90,14 @@ export function registerEventHandlers() {
 
         // ユーザーが退出したら、その音声認識状態をクリーンアップ
         cleanupUserState(member.user.id);
+
+        // 退出後の非BOTメンバー数を確認
+        const afterCount = oldState.channel.members.filter(m => !m.user.bot).size;
+
+        // botしか居なくなった場合、メッセージ送信後にスレッドをクリアするフラグを立てる
+        if (afterCount === 0) {
+          shouldClearThread = true;
+        }
       }
       // ボイスチャンネル間を移動した場合
       else if (
@@ -88,8 +114,28 @@ export function registerEventHandlers() {
 
       // メッセージがある場合のみ送信とログ出力
       if (message && consoleLog) {
-        await cachedLogChannel.send(message);
+        // アクティブなスレッドがあればそこに送信、なければログチャンネルに送信
+        const activeThread = getActiveThread();
+        if (activeThread) {
+          try {
+            await activeThread.send(message);
+          } catch (error) {
+            console.error("Failed to send to thread, falling back to channel:", error);
+            // スレッド送信失敗時はログチャンネルにフォールバック
+            await cachedLogChannel.send(message);
+            // スレッドが無効なのでクリア
+            setActiveThread(null);
+          }
+        } else {
+          await cachedLogChannel.send(message);
+        }
         console.log(consoleLog);
+
+        // 退出後にスレッドをクリアする必要がある場合
+        if (shouldClearThread) {
+          setActiveThread(null);
+          console.log("Voice channel is now empty (only bots), thread cleared");
+        }
       }
     } catch (error) {
       console.error("Error in voiceStateUpdate handler:", error);

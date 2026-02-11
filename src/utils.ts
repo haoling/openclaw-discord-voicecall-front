@@ -1,4 +1,4 @@
-import { getCachedLogChannel, getVoiceConnection } from "./state";
+import { getCachedLogChannel, getVoiceConnection, getActiveThread, setActiveThread } from "./state";
 import { config } from "./config";
 import {
   createAudioPlayer,
@@ -38,6 +38,32 @@ export function getJapaneseTimestamp(): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/**
+ * スレッドまたはログチャンネルにメッセージを送信（エラーハンドリング付き）
+ */
+export async function sendToThreadOrChannel(message: string): Promise<void> {
+  const cachedLogChannel = getCachedLogChannel();
+  if (!cachedLogChannel) {
+    console.error("Log channel not available");
+    return;
+  }
+
+  const activeThread = getActiveThread();
+  if (activeThread) {
+    try {
+      await activeThread.send(message);
+    } catch (error) {
+      console.error("Failed to send to thread, falling back to channel:", error);
+      // スレッド送信失敗時はログチャンネルにフォールバック
+      await cachedLogChannel.send(message);
+      // スレッドが無効なのでクリア
+      setActiveThread(null);
+    }
+  } else {
+    await cachedLogChannel.send(message);
+  }
 }
 
 /**
@@ -301,19 +327,14 @@ async function sendChatCompletionRequest(
     // タイムアウトエラーの場合、ログチャンネルに記録
     if (error instanceof Error && error.name === "AbortError") {
       console.error("[LLM] Request timed out after 60 seconds");
-      const cachedLogChannel = getCachedLogChannel();
-      if (cachedLogChannel) {
-        const timestamp = getJapaneseTimestamp();
-        const timeoutMessage = `⚠️ **LLMタイムアウト** — ${timestamp}\nLLMからの応答が60秒以内に得られませんでした。`;
-        cachedLogChannel
-          .send(timeoutMessage)
-          .catch((sendError) =>
-            console.error(
-              "[LLM] Failed to send timeout message to channel:",
-              sendError
-            )
-          );
-      }
+      const timestamp = getJapaneseTimestamp();
+      const timeoutMessage = `⚠️ **LLMタイムアウト** — ${timestamp}\nLLMからの応答が60秒以内に得られませんでした。`;
+      sendToThreadOrChannel(timeoutMessage).catch((sendError) =>
+        console.error(
+          "[LLM] Failed to send timeout message to channel:",
+          sendError
+        )
+      );
     } else {
       console.error("[LLM] Error sending chat completion request:", error);
     }
@@ -336,7 +357,7 @@ export async function sendTranscriptionToChannel(
   try {
     const timestamp = getJapaneseTimestamp();
     const message = `💬 **${username}** — ${timestamp}\n${transcript}`;
-    await cachedLogChannel.send(message);
+    await sendToThreadOrChannel(message);
     console.log(`[Transcription] ${username}: ${transcript}`);
 
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
@@ -353,8 +374,8 @@ export async function sendTranscriptionToChannel(
           const llmTimestamp = getJapaneseTimestamp();
           const llmMessage = `🤖 **LLM応答** — ${llmTimestamp}\n${llmResponse}`;
 
-          // ログチャンネルに投稿（これは待機する）
-          await cachedLogChannel.send(llmMessage);
+          // ログチャンネルまたはアクティブなスレッドに投稿（これは待機する）
+          await sendToThreadOrChannel(llmMessage);
 
           // TTS音声再生は非同期で実行（待機しない）
           (async () => {
@@ -376,7 +397,7 @@ export async function sendTranscriptionToChannel(
         try {
           const timestamp = getJapaneseTimestamp();
           const errorMessage = `❌ **LLMエラー** — ${timestamp}\nLLM処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`;
-          await cachedLogChannel.send(errorMessage);
+          await sendToThreadOrChannel(errorMessage);
         } catch (sendError) {
           console.error(
             "[LLM] Failed to send error message to channel:",
