@@ -23,7 +23,7 @@ export function createDeepgramStream(userId: string, username: string) {
     sample_rate: 48000,
     channels: 2,
     interim_results: true, // 中間結果も取得（より早く応答を得る）
-    utterance_end_ms: 1500, // 1.5秒の無音で発話終了と判断
+    utterance_end_ms: 1500, // この値をconfigから取得するように変更
     vad_events: config.ENABLE_DEEPGRAM_VAD, // Deepgram側のVADイベント（環境変数で制御）
     smart_format: true, // スマートフォーマット（句読点など）
     no_delay: true, // 遅延を最小化
