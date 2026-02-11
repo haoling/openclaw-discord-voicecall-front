@@ -38,6 +38,15 @@ export function getJapaneseTimestamp(): string {
 
 /**
  * ボイスチャンネルに効果音を再生
+ *
+ * 注意: この機能を使用するには、実行環境にFFmpegがインストールされている必要があります。
+ * MP3形式のファイルを再生する場合、Discord.jsはFFmpegを使用して音声をデコードします。
+ *
+ * もしFFmpegがインストールできない環境の場合、以下のコマンドでOgg Opus形式に変換できます：
+ * ```bash
+ * ffmpeg -i assets/sounds/pin1.mp3 -c:a libopus -b:a 96k assets/sounds/pin1.ogg
+ * ```
+ * その後、soundFilePathを変更してください。
  */
 async function playSoundEffect(soundFilePath: string): Promise<void> {
   const connection = getVoiceConnection();
