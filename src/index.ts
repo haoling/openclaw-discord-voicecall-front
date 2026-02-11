@@ -111,7 +111,7 @@ function createDeepgramStream(userId: string, username: string) {
   console.log(`[Deepgram] Client created, establishing live connection...`);
 
   const dgConnection = deepgram.listen.live({
-    model: "nova-2",
+    model: "nova-3",
     language: "ja",
     encoding: "linear16",
     sample_rate: 48000,
@@ -123,53 +123,41 @@ function createDeepgramStream(userId: string, username: string) {
     `[Deepgram] Live connection object created for ${username}, initial state: ${dgConnection.getReadyState()}`
   );
 
-  // 接続状態の変化を監視
-  const checkConnectionState = setInterval(() => {
-    const state = dgConnection.getReadyState();
-    console.log(`[Deepgram] Connection state check for ${username}: ${state}`);
-    if (state === 1) {
-      console.log(`[Deepgram] Connection is now OPEN for ${username}`);
-      clearInterval(checkConnectionState);
-    } else if (state === 3) {
-      console.log(`[Deepgram] Connection is CLOSED for ${username}`);
-      clearInterval(checkConnectionState);
-    }
-  }, 500);
-
+  // 公式例に従い、Openイベント内で他のイベントリスナーを登録
   dgConnection.on(LiveTranscriptionEvents.Open, () => {
     console.log(
       `[Deepgram] Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
     );
-    clearInterval(checkConnectionState);
-  });
 
-  dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
-    const transcript = data.channel?.alternatives?.[0]?.transcript;
-    if (transcript && transcript.trim()) {
-      const state = userStates.get(userId);
-      if (state) {
-        // 文字起こし結果を累積
-        state.currentTranscript += transcript + " ";
+    // Openイベント内でTranscript, Error, Closeイベントを登録
+    dgConnection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+      const transcript = data.channel?.alternatives?.[0]?.transcript;
+      if (transcript && transcript.trim()) {
+        const state = userStates.get(userId);
+        if (state) {
+          // 文字起こし結果を累積
+          state.currentTranscript += transcript + " ";
+        }
       }
-    }
-  });
-
-  dgConnection.on(LiveTranscriptionEvents.Error, (error: any) => {
-    console.error(`[Deepgram] Error for ${username}:`, {
-      type: error.type,
-      message: error.message,
-      error: error.error,
-      reason: error.reason,
-      code: error.code,
-      details: JSON.stringify(error, null, 2),
     });
-  });
 
-  dgConnection.on(LiveTranscriptionEvents.Close, (event: any) => {
-    console.log(`[Deepgram] Connection closed for ${username}:`, {
-      code: event?.code,
-      reason: event?.reason,
-      wasClean: event?.wasClean,
+    dgConnection.on(LiveTranscriptionEvents.Error, (error: any) => {
+      console.error(`[Deepgram] Error for ${username}:`, {
+        type: error.type,
+        message: error.message,
+        error: error.error,
+        reason: error.reason,
+        code: error.code,
+        details: JSON.stringify(error, null, 2),
+      });
+    });
+
+    dgConnection.on(LiveTranscriptionEvents.Close, (event: any) => {
+      console.log(`[Deepgram] Connection closed for ${username}:`, {
+        code: event?.code,
+        reason: event?.reason,
+        wasClean: event?.wasClean,
+      });
     });
   });
 
