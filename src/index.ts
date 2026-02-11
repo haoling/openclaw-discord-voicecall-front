@@ -679,7 +679,7 @@ async function connectToVoiceChannel() {
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator as any,
+      adapterCreator: channel.guild.voiceAdapterCreator as InternalDiscordGatewayAdapterCreator,
       selfDeaf: false,
       selfMute: true,
     });
