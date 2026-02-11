@@ -19,7 +19,7 @@ const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
 const BASE_SILENCE_TIME = 1500; // 無音判定の基準時間（ミリ秒）
-const VOLUME_THRESHOLD = 150; // 音量閾値（子音も検出できるよう調整）
+const VOLUME_THRESHOLD = parseInt(process.env.VOLUME_THRESHOLD || "150", 10); // 音量閾値（環境変数で設定可能、デフォルト: 150）
 const AUDIO_BUFFER_SIZE = 30; // オーディオバッファサイズ（約600ms分、20msフレーム × 30）
 
 // 環境変数の検証
