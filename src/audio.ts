@@ -94,17 +94,6 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     }
   }, config.KEEP_ALIVE_INTERVAL);
 
-  // OpusデコーダーとPCM変換を設定
-  const opusDecoder = new prism.opus.Decoder({
-    rate: 48000,
-    channels: 2,
-    frameSize: 960,
-  });
-
-  // 音声ストリームをOpusデコーダーに接続
-  // pipelineではなくpipeを使用することで、個別パケットのデコードエラーでストリーム全体が停止しないようにする
-  audioStream.pipe(opusDecoder);
-
   // 最初のデータ受信をログ出力
   let firstDataReceived = false;
   let audioStreamDataCount = 0;
@@ -118,29 +107,12 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     }
   });
 
-  // Opusデコーダーのエラーハンドリング
-  opusDecoder.on("error", (error: any) => {
-    // Opusデコードエラーは個別のパケットの問題なので、ログ出力のみで継続
-    // モバイル版Discordからの接続時に不正なパケットが送信されることがあるため
-    if (config.VERBOSE) {
-      console.log(`[Audio] Opus decode error for ${username} (ignoring packet):`, error.message);
-    }
-    // デコードに失敗したパケットは破棄し、ストリームは継続
-    // エラーイベントをキャッチすることで、ストリームが停止しないようにする
-  });
+  // OpusデコーダーとPCM変換を設定
+  // エラーでクローズされた場合に再作成できるように、参照を保持
+  let currentOpusDecoder: any = null;
 
-  // Opusデコーダーのライフサイクルイベント（デバッグ用）
-  opusDecoder.on("end", () => {
-    console.log(`[Audio] OpusDecoder ended for ${username}`);
-  });
-  opusDecoder.on("close", () => {
-    console.log(`[Audio] OpusDecoder closed for ${username}`);
-  });
-  opusDecoder.on("finish", () => {
-    console.log(`[Audio] OpusDecoder finished for ${username}`);
-  });
-
-  opusDecoder.on("data", (pcmData: Buffer) => {
+  // Opusデコーダーのdataイベントハンドラー（再利用可能）
+  const handleOpusData = (pcmData: Buffer) => {
     // 音声データ受信時刻を更新
     state.lastAudioDataTime = Date.now();
     opusDecoderDataCount++;
@@ -435,7 +407,70 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         sendKeepAliveIfNeeded(state, username);
       }
     }
-  });
+  };
+
+  // OpusDeコーダーを作成して接続する関数
+  const createAndConnectOpusDecoder = () => {
+    const opusDecoder = new prism.opus.Decoder({
+      rate: 48000,
+      channels: 2,
+      frameSize: 960,
+    });
+
+    // Opusデコーダーのエラーハンドリング
+    opusDecoder.on("error", (error: any) => {
+      // Opusデコードエラーは個別のパケットの問題なので、ログ出力のみ
+      if (config.VERBOSE) {
+        console.log(`[Audio] Opus decode error for ${username} (ignoring packet):`, error.message);
+      }
+      // エラーをキャッチすることでストリームへのエラー伝播を防ぐ
+    });
+
+    // Opusデコーダーのcloseイベント - エラーでクローズされた場合に再作成
+    opusDecoder.on("close", () => {
+      console.log(`[Audio] OpusDecoder closed for ${username}`);
+
+      // 現在のデコーダーをunpipe
+      if (currentOpusDecoder) {
+        audioStream.unpipe(currentOpusDecoder);
+      }
+
+      // ユーザーの状態が残っている場合のみ再作成
+      const currentState = userStates.get(userId);
+      if (currentState) {
+        console.log(`[Audio] Recreating OpusDecoder for ${username}...`);
+        // 少し待ってから再作成（即座に再作成すると問題が発生する可能性があるため）
+        setTimeout(() => {
+          const state = userStates.get(userId);
+          if (state) {
+            createAndConnectOpusDecoder();
+          }
+        }, 100);
+      }
+    });
+
+    // Opusデコーダーのその他のライフサイクルイベント（デバッグ用）
+    opusDecoder.on("end", () => {
+      console.log(`[Audio] OpusDecoder ended for ${username}`);
+    });
+    opusDecoder.on("finish", () => {
+      console.log(`[Audio] OpusDecoder finished for ${username}`);
+    });
+
+    // dataイベントハンドラーを設定
+    opusDecoder.on("data", handleOpusData);
+
+    // 音声ストリームをOpusデコーダーに接続
+    audioStream.pipe(opusDecoder);
+
+    // 現在のデコーダーを更新
+    currentOpusDecoder = opusDecoder;
+
+    console.log(`[Audio] OpusDecoder connected for ${username}`);
+  };
+
+  // 最初のOpusデコーダーを作成
+  createAndConnectOpusDecoder();
 
   // audioStreamのエラーハンドリング
   audioStream.on("error", (error: any) => {
