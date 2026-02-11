@@ -439,11 +439,20 @@ function listenToUser(userId: string, username: string, audioStream: any) {
         // 音声検出
         if (!state.isSpeaking) {
           state.isSpeaking = true;
-          state.silenceStartTime = null;
           if (VERBOSE) {
             console.log(`[VERBOSE] ${username} | 音声検出: 発話開始`);
           }
         }
+
+        // 音声検出時は常に無音タイマーをリセット（無音中に音声再開した場合も含む）
+        if (state.silenceStartTime !== null) {
+          if (VERBOSE) {
+            console.log(
+              `[VERBOSE] ${username} | 無音中に音声再開、無音タイマーをリセット`
+            );
+          }
+        }
+        state.silenceStartTime = null;
 
         if (!state.isSendingToDeepgram) {
           // 新しい発話開始、Deepgramへの送信を開始
