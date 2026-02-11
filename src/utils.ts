@@ -105,22 +105,21 @@ export async function sendTranscriptionToChannel(
     console.log(`[Transcription] ${username}: ${transcript}`);
 
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
-    sendChatCompletionRequest(transcript)
-      .then((llmResponse) => {
+    (async () => {
+      try {
+        const llmResponse = await sendChatCompletionRequest(transcript);
         if (llmResponse) {
           const llmTimestamp = getJapaneseTimestamp();
           const llmMessage = `🤖 **LLM応答** — ${llmTimestamp}\n${llmResponse}`;
-          return cachedLogChannel.send(llmMessage);
+          await cachedLogChannel.send(llmMessage);
+          if (config.VERBOSE) {
+            console.log(`[LLM] Response sent to channel for: ${transcript}`);
+          }
         }
-      })
-      .then(() => {
-        if (config.VERBOSE) {
-          console.log(`[LLM] Response sent to channel for: ${transcript}`);
-        }
-      })
-      .catch((error) => {
-        console.error("[LLM] Error processing LLM response:", error);
-      });
+      } catch (error) {
+        console.error("[LLM] Error processing and sending LLM response:", error);
+      }
+    })();
   } catch (error) {
     console.error("Error sending transcription:", error);
   }
