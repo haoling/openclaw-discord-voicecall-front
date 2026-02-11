@@ -2,6 +2,17 @@ import { getCachedLogChannel } from "./state";
 import { config } from "./config";
 
 /**
+ * OpenAI chat completion互換APIのレスポンス型
+ */
+type ChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+};
+
+/**
  * 日本時間のタイムスタンプを生成するヘルパー関数
  */
 export function getJapaneseTimestamp(): string {
@@ -72,13 +83,7 @@ async function sendChatCompletionRequest(
       return null;
     }
 
-    const data = (await response.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string;
-        };
-      }>;
-    };
+    const data = (await response.json()) as ChatCompletionResponse;
     const llmResponse = data.choices?.[0]?.message?.content;
 
     if (!llmResponse) {
