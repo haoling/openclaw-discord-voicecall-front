@@ -17,7 +17,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 # ランタイム依存関係をインストール（libsodium、ffmpeg）
-RUN apk add --no-cache libsodium ffmpeg python3 make g++
+RUN apk add --no-cache libsodium ffmpeg
 
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
