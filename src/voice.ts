@@ -7,7 +7,7 @@ import {
 } from "@discordjs/voice";
 import { config } from "./config";
 import { client, userStates, getCachedLogChannel, setVoiceConnection, getActiveThread } from "./state";
-import { getJapaneseTimestamp } from "./utils";
+import { getJapaneseTimestamp, sendToThreadOrChannel } from "./utils";
 import { listenToUser, cleanupUserState } from "./audio";
 
 /**
@@ -121,14 +121,9 @@ export async function connectToVoiceChannel() {
       }
     });
 
-    const cachedLogChannel = getCachedLogChannel();
-    if (cachedLogChannel) {
-      const activeThread = getActiveThread();
-      const targetChannel = activeThread || cachedLogChannel;
-      await targetChannel.send(
-        `🎙️ ボイスチャンネル接続 — ${getJapaneseTimestamp()}\nボットがボイスチャンネルに接続し、音声認識を開始しました。`
-      );
-    }
+    await sendToThreadOrChannel(
+      `🎙️ ボイスチャンネル接続 — ${getJapaneseTimestamp()}\nボットがボイスチャンネルに接続し、音声認識を開始しました。`
+    );
   } catch (error) {
     console.error("[Voice] Failed to connect to voice channel:", error);
   }

@@ -63,13 +63,12 @@ export function registerEventHandlers() {
 
       // ボイスチャンネルに参加した場合
       if (!oldState.channel && newState.channel) {
-        // 参加前の非BOTメンバー数を確認
-        const beforeCount = 0; // oldState.channelがnullなので0
         // 参加後の非BOTメンバー数を確認
         const afterCount = newState.channel.members.filter(m => !m.user.bot).size;
 
-        // botしか居ない状態から誰かが入ってきた場合、新しいスレッドを作成
-        if (beforeCount === 0 && afterCount > 0) {
+        // このユーザーが参加したことで非BOTメンバーが1人になり、かつアクティブなスレッドがない場合にスレッドを作成
+        // これにより、複数人が同時に参加した場合の競合状態を防ぐ
+        if (afterCount === 1 && !getActiveThread()) {
           const threadName = `ボイスログ ${timestamp}`;
           const thread = await cachedLogChannel.threads.create({
             name: threadName,
@@ -118,7 +117,15 @@ export function registerEventHandlers() {
         // アクティブなスレッドがあればそこに送信、なければログチャンネルに送信
         const activeThread = getActiveThread();
         if (activeThread) {
-          await activeThread.send(message);
+          try {
+            await activeThread.send(message);
+          } catch (error) {
+            console.error("Failed to send to thread, falling back to channel:", error);
+            // スレッド送信失敗時はログチャンネルにフォールバック
+            await cachedLogChannel.send(message);
+            // スレッドが無効なのでクリア
+            setActiveThread(null);
+          }
         } else {
           await cachedLogChannel.send(message);
         }
