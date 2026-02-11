@@ -114,7 +114,9 @@ function createDeepgramStream(userId: string, username: string) {
   });
 
   dgConnection.on("open", () => {
-    console.log(`[Deepgram] Connection opened for ${username}`);
+    console.log(
+      `[Deepgram] Connection opened for ${username}, ready state: ${dgConnection.getReadyState()}`
+    );
   });
 
   dgConnection.on("Results", (data: any) => {
@@ -129,11 +131,22 @@ function createDeepgramStream(userId: string, username: string) {
   });
 
   dgConnection.on("error", (error: any) => {
-    console.error(`[Deepgram] Error for ${username}:`, error);
+    console.error(`[Deepgram] Error for ${username}:`, {
+      type: error.type,
+      message: error.message,
+      error: error.error,
+      reason: error.reason,
+      code: error.code,
+      details: JSON.stringify(error, null, 2),
+    });
   });
 
-  dgConnection.on("close", () => {
-    console.log(`[Deepgram] Connection closed for ${username}`);
+  dgConnection.on("close", (event: any) => {
+    console.log(`[Deepgram] Connection closed for ${username}:`, {
+      code: event?.code,
+      reason: event?.reason,
+      wasClean: event?.wasClean,
+    });
   });
 
   return dgConnection;
@@ -200,8 +213,17 @@ function listenToUser(userId: string, username: string, audioStream: any) {
     state.isSpeaking = true;
 
     // Deepgramに音声データを送信
-    if (deepgramStream.getReadyState() === 1) {
-      deepgramStream.send(pcmData);
+    try {
+      const readyState = deepgramStream.getReadyState();
+      if (readyState === 1) {
+        deepgramStream.send(pcmData);
+      } else {
+        console.log(
+          `[Deepgram] Not ready to send data for ${username}, state: ${readyState}`
+        );
+      }
+    } catch (error) {
+      console.error(`[Deepgram] Error sending data for ${username}:`, error);
     }
 
     // 無音タイマーをリセット
