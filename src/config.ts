@@ -20,6 +20,12 @@ const AUDIO_BUFFER_SIZE = 30; // オーディオバッファサイズ（約600ms
 const KEEP_ALIVE_INTERVAL = 5000; // Deepgramキープアライブ送信間隔（5秒）
 const SOUND_EFFECT_PATH = process.env.SOUND_EFFECT_PATH || "assets/sounds/pin1.mp3"; // 効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/pin1.mp3）
 
+// 動的VADしきい値調整の設定
+const DYNAMIC_THRESHOLD_RATIO = parseFloat(process.env.DYNAMIC_THRESHOLD_RATIO || "0.4"); // speech_final後、発話中の平均音量に対する割合（デフォルト: 0.4 = 40%）
+const MIN_ELEVATED_THRESHOLD = parseInt(process.env.MIN_ELEVATED_THRESHOLD || String(VOLUME_THRESHOLD), 10); // 動的しきい値の最小値（デフォルト: VOLUME_THRESHOLDと同じ）
+const MAX_ELEVATED_THRESHOLD = parseInt(process.env.MAX_ELEVATED_THRESHOLD || "500", 10); // 動的しきい値の最大値（デフォルト: 500）
+const THRESHOLD_ELEVATION_DURATION = parseInt(process.env.THRESHOLD_ELEVATION_DURATION || "2000", 10); // しきい値引き上げの継続時間（デフォルト: 2000ms）
+
 // 環境変数の検証
 if (!DISCORD_BOT_TOKEN) {
   console.error("Error: DISCORD_BOT_TOKEN is not set");
@@ -80,6 +86,10 @@ console.log(
 console.log(
   `SOUND_EFFECT_PATH: ${SOUND_EFFECT_PATH}`
 );
+console.log(`DYNAMIC_THRESHOLD_RATIO: ${DYNAMIC_THRESHOLD_RATIO} (発話平均音量の${DYNAMIC_THRESHOLD_RATIO * 100}%)`);
+console.log(`MIN_ELEVATED_THRESHOLD: ${MIN_ELEVATED_THRESHOLD}`);
+console.log(`MAX_ELEVATED_THRESHOLD: ${MAX_ELEVATED_THRESHOLD}`);
+console.log(`THRESHOLD_ELEVATION_DURATION: ${THRESHOLD_ELEVATION_DURATION}ms`);
 console.log("====================");
 
 export const config = {
@@ -103,4 +113,8 @@ export const config = {
   AUDIO_BUFFER_SIZE,
   KEEP_ALIVE_INTERVAL,
   SOUND_EFFECT_PATH,
+  DYNAMIC_THRESHOLD_RATIO,
+  MIN_ELEVATED_THRESHOLD,
+  MAX_ELEVATED_THRESHOLD,
+  THRESHOLD_ELEVATION_DURATION,
 } as const;

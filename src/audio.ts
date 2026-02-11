@@ -81,6 +81,17 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     isSendingToDeepgram: false,
     audioBuffer: [],
     lastKeepAliveTime: Date.now(),
+    finalTranscriptTimer: null,
+
+    // 動的VADしきい値調整
+    dynamicVolumeThreshold: config.VOLUME_THRESHOLD,
+    thresholdElevationTime: null,
+
+    // 発話中の音量統計
+    speakingVolumeSum: 0,
+    speakingVolumeCount: 0,
+    speakingMaxVolume: 0,
+    speakingAverageVolume: null,
   };
   userStates.set(userId, state);
 
@@ -154,10 +165,15 @@ export function listenToUser(userId: string, username: string, audioStream: impo
             state.totalSamples > 0
               ? ((state.activeSamples / state.totalSamples) * 100).toFixed(1)
               : "0.0";
+          const volumeStats = state.speakingVolumeCount > 0
+            ? `平均: ${(state.speakingVolumeSum / state.speakingVolumeCount).toFixed(0)} | 最大: ${state.speakingMaxVolume.toFixed(0)}`
+            : '統計なし';
           console.log(
-            `[VERBOSE] ${username} | ローカルVAD: 有効 | 音量: ${averageVolume.toFixed(0)} | 閾値: ${config.VOLUME_THRESHOLD} | ` +
-              `音声検出: ${averageVolume > config.VOLUME_THRESHOLD ? "✓" : "✗"} | ` +
-              `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples})`
+            `[VERBOSE] ${username} | ローカルVAD: 有効 | 音量: ${averageVolume.toFixed(0)} | ` +
+              `閾値: ${state.dynamicVolumeThreshold} (通常: ${config.VOLUME_THRESHOLD}) | ` +
+              `音声検出: ${averageVolume > state.dynamicVolumeThreshold ? "✓" : "✗"} | ` +
+              `アクティブ率: ${activePercentage}% (${state.activeSamples}/${state.totalSamples}) | ` +
+              `統計: ${volumeStats}`
           );
           state.lastVerboseLog = now;
           state.totalSamples = 0;
@@ -165,7 +181,30 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         }
       }
 
-      shouldSendAudio = averageVolume > config.VOLUME_THRESHOLD;
+      // 音量統計の収集（発話中のみ）
+      if (state.isSpeaking && averageVolume > config.VOLUME_THRESHOLD) {
+        state.speakingVolumeSum += averageVolume;
+        state.speakingVolumeCount++;
+        state.speakingMaxVolume = Math.max(state.speakingMaxVolume, averageVolume);
+      }
+
+      // しきい値引き上げ期間のチェック
+      if (state.thresholdElevationTime !== null) {
+        const elevationElapsed = Date.now() - state.thresholdElevationTime;
+        if (elevationElapsed >= config.THRESHOLD_ELEVATION_DURATION) {
+          // 通常のしきい値に戻す
+          state.dynamicVolumeThreshold = config.VOLUME_THRESHOLD;
+          state.thresholdElevationTime = null;
+          if (config.VERBOSE) {
+            console.log(
+              `[VERBOSE] ${username} | しきい値を通常値${config.VOLUME_THRESHOLD}に戻す`
+            );
+          }
+        }
+      }
+
+      // 動的しきい値で判定
+      shouldSendAudio = averageVolume > state.dynamicVolumeThreshold;
     } else {
       // ローカルVADが無効な場合、すべての音声をDeepgramに送信
       if (config.VERBOSE) {
@@ -193,12 +232,17 @@ export function listenToUser(userId: string, username: string, audioStream: impo
         }
       }
 
-      if (averageVolume > config.VOLUME_THRESHOLD) {
+      if (averageVolume > state.dynamicVolumeThreshold) {
         // 音声検出
         if (!state.isSpeaking) {
           state.isSpeaking = true;
+          // 新しい発話が開始された場合、統計をリセット
+          state.speakingVolumeSum = 0;
+          state.speakingVolumeCount = 0;
+          state.speakingMaxVolume = 0;
+          state.speakingAverageVolume = null;
           if (config.VERBOSE) {
-            console.log(`[VERBOSE] ${username} | 音声検出: 発話開始`);
+            console.log(`[VERBOSE] ${username} | 音声検出: 発話開始 (音量統計リセット)`);
           }
         }
 
@@ -426,11 +470,22 @@ export function cleanupUserState(userId: string) {
   if (state.silenceTimer) {
     clearTimeout(state.silenceTimer);
   }
+  if (state.finalTranscriptTimer) {
+    clearTimeout(state.finalTranscriptTimer);
+  }
 
   // 残りの文字起こし結果を送信
   if (state.currentTranscript.trim()) {
     sendTranscriptionToChannel(state.username, state.currentTranscript.trim());
   }
+
+  // 動的VADしきい値と統計をリセット
+  state.dynamicVolumeThreshold = config.VOLUME_THRESHOLD;
+  state.thresholdElevationTime = null;
+  state.speakingVolumeSum = 0;
+  state.speakingVolumeCount = 0;
+  state.speakingMaxVolume = 0;
+  state.speakingAverageVolume = null;
 
   // Deepgram接続をクローズ
   if (state.deepgramStream) {

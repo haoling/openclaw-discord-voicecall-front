@@ -1,5 +1,6 @@
 import { config } from "./config";
 import { userStates } from "./state";
+import { sendTranscriptionToChannel } from "./utils";
 
 /**
  * Deepgramストリームを作成
@@ -82,6 +83,47 @@ export function createDeepgramStream(userId: string, username: string) {
         if (state) {
           // 文字起こし結果を累積
           state.currentTranscript += transcript + " ";
+
+          // speech_finalがtrueの場合、動的VADしきい値を引き上げ
+          // モバイル版Discordからの低音量ノイズを無視して無音検出を機能させる
+          if (speechFinal && state.currentTranscript.trim()) {
+            // 既存のタイマーをクリア（もしあれば）
+            if (state.finalTranscriptTimer) {
+              clearTimeout(state.finalTranscriptTimer);
+              state.finalTranscriptTimer = null;
+            }
+
+            // 発話中の平均音量を計算
+            if (state.speakingVolumeCount > 0) {
+              state.speakingAverageVolume = state.speakingVolumeSum / state.speakingVolumeCount;
+
+              // 動的しきい値を算出
+              // 平均音量の比率、ただしMIN_ELEVATED_THRESHOLD以上、MAX_ELEVATED_THRESHOLD以下
+              const calculatedThreshold = state.speakingAverageVolume * config.DYNAMIC_THRESHOLD_RATIO;
+              const elevatedThreshold = Math.max(
+                config.MIN_ELEVATED_THRESHOLD,
+                Math.min(calculatedThreshold, config.MAX_ELEVATED_THRESHOLD)
+              );
+
+              state.dynamicVolumeThreshold = elevatedThreshold;
+              state.thresholdElevationTime = Date.now();
+
+              if (config.VERBOSE) {
+                console.log(
+                  `[VERBOSE] ${username} | speech_final検出\n` +
+                  `  発話統計: 平均=${state.speakingAverageVolume.toFixed(0)} | ` +
+                  `最大=${state.speakingMaxVolume.toFixed(0)} | サンプル数=${state.speakingVolumeCount}\n` +
+                  `  算出しきい値: ${calculatedThreshold.toFixed(0)} → 適用値: ${elevatedThreshold.toFixed(0)} ` +
+                  `(比率: ${config.DYNAMIC_THRESHOLD_RATIO})`
+                );
+              }
+            } else {
+              // 統計がない場合は通常のしきい値を維持
+              if (config.VERBOSE) {
+                console.log(`[VERBOSE] ${username} | speech_final検出 (統計なし、しきい値維持)`);
+              }
+            }
+          }
         }
       } else if (config.VERBOSE && transcript && transcript.trim()) {
         console.log(
