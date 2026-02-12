@@ -6,7 +6,6 @@ const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const CHAT_COMPLETION_ENDPOINT_URL = process.env.CHAT_COMPLETION_ENDPOINT_URL || "";
 const CHAT_COMPLETION_APIKEY = process.env.CHAT_COMPLETION_APIKEY || "";
 const CHAT_COMPLETION_MODEL = process.env.CHAT_COMPLETION_MODEL || "gpt-4"; // LLMモデル名（環境変数で設定可能、デフォルト: gpt-4）
-const CHAT_COMPLETION_SESSION_KEY = "fixed-session-key-placeholder"; // セッションキー固定値（後で自動算出に変更予定）
 const TTS_ENDPOINT_URL = process.env.TTS_ENDPOINT_URL || ""; // TTS APIエンドポイントURL
 const TTS_MODEL = process.env.TTS_MODEL || ""; // TTSモデル名
 const TTS_VOICE = process.env.TTS_VOICE || ""; // TTS音声名
@@ -91,7 +90,6 @@ export const config = {
   CHAT_COMPLETION_ENDPOINT_URL,
   CHAT_COMPLETION_APIKEY,
   CHAT_COMPLETION_MODEL,
-  CHAT_COMPLETION_SESSION_KEY,
   TTS_ENDPOINT_URL,
   TTS_MODEL,
   TTS_VOICE,
