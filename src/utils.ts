@@ -41,6 +41,19 @@ export function getJapaneseTimestamp(): string {
 }
 
 /**
+ * DiscordスレッドIDからセッションキーを生成
+ * フォーマット: discord:voice:{thread_id}
+ */
+export function generateSessionKey(): string {
+  const activeThread = getActiveThread();
+  if (activeThread) {
+    return `discord:voice:${activeThread.id}`;
+  }
+  // スレッドがない場合はデフォルト値を返す
+  return "discord:voice:no-thread";
+}
+
+/**
  * スレッドまたはログチャンネルにメッセージを送信（エラーハンドリング付き）
  */
 export async function sendToThreadOrChannel(message: string): Promise<void> {
@@ -280,10 +293,13 @@ async function sendChatCompletionRequest(
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
+    // スレッドIDからセッションキーを生成
+    const sessionKey = generateSessionKey();
+
     // VERBOSEモードの場合、セッションキーをログ出力
     if (config.VERBOSE) {
       console.log(
-        `[LLM] Sending request with session key: ${config.CHAT_COMPLETION_SESSION_KEY}`
+        `[LLM] Sending request with session key: ${sessionKey}`
       );
       console.log(`[LLM] Using model: ${config.CHAT_COMPLETION_MODEL}`);
     }
@@ -293,7 +309,7 @@ async function sendChatCompletionRequest(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.CHAT_COMPLETION_APIKEY}`,
-        "x-openclaw-session-key": config.CHAT_COMPLETION_SESSION_KEY,
+        "x-openclaw-session-key": sessionKey,
       },
       body: JSON.stringify({
         model: config.CHAT_COMPLETION_MODEL,
