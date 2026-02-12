@@ -136,25 +136,19 @@ async function connectToVoiceChannelInternal() {
  * ボイスチャンネルに接続（再試行あり）
  */
 export async function connectToVoiceChannel() {
-  const maxRetries = 3;
-  const baseDelay = 5000; // 5秒
+  const retryDelay = 5000; // 5秒
+  let attempt = 0;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  while (true) {
+    attempt++;
     try {
-      console.log(`[Voice] Connection attempt ${attempt}/${maxRetries}`);
+      console.log(`[Voice] Connection attempt ${attempt}`);
       await connectToVoiceChannelInternal();
       return; // 接続成功
     } catch (error) {
-      console.error(`[Voice] Connection attempt ${attempt}/${maxRetries} failed:`, error);
-
-      if (attempt < maxRetries) {
-        // 指数バックオフで待機時間を計算（5秒、10秒、20秒）
-        const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`[Voice] Retrying in ${delay / 1000} seconds...`);
-        await sleep(delay);
-      } else {
-        console.error(`[Voice] All ${maxRetries} connection attempts failed. Giving up.`);
-      }
+      console.error(`[Voice] Connection attempt ${attempt} failed:`, error);
+      console.log(`[Voice] Retrying in ${retryDelay / 1000} seconds...`);
+      await sleep(retryDelay);
     }
   }
 }
