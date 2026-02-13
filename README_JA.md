@@ -73,7 +73,7 @@ OpenClawエージェントとリアルタイムで音声会話ができるDiscor
 ### 1. リポジトリのクローン
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/haoling/openclaw-discord-voicecall-front.git
 cd openclaw-discord-voicecall-front
 ```
 

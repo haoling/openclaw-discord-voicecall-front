@@ -73,7 +73,7 @@ This bot connects to Discord voice channels, transcribes user speech in real-tim
 ### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/haoling/openclaw-discord-voicecall-front.git
 cd openclaw-discord-voicecall-front
 ```
 
