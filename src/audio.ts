@@ -91,6 +91,31 @@ export function listenToUser(userId: string, username: string, audioStream: impo
     const currentState = userStates.get(userId);
     if (currentState) {
       sendKeepAliveIfNeeded(currentState, username);
+
+      // 音声ストリームタイムアウトチェック（Discord VADで音声が止まった場合の対策）
+      if (currentState.isSendingToDeepgram) {
+        const timeSinceLastAudioData = Date.now() - currentState.lastAudioDataTime;
+
+        if (timeSinceLastAudioData > config.VOICE_STREAM_TIMEOUT) {
+          // 音声データが一定時間来ていない場合、強制的に送信
+          if (currentState.currentTranscript.trim()) {
+            if (config.VERBOSE) {
+              console.log(
+                `[VERBOSE] ${username} | 音声ストリームタイムアウト (${timeSinceLastAudioData}ms) → 強制送信: "${currentState.currentTranscript.trim()}"`
+              );
+            }
+            console.log(
+              `[Audio] Voice stream timeout for ${username} (${timeSinceLastAudioData}ms since last audio data)`
+            );
+            sendTranscriptionToChannel(currentState.username, currentState.currentTranscript.trim());
+            currentState.currentTranscript = "";
+          }
+          currentState.isSpeaking = false;
+          currentState.isSendingToDeepgram = false;
+          currentState.silenceStartTime = null;
+          currentState.audioBuffer = [];
+        }
+      }
     }
   }, config.KEEP_ALIVE_INTERVAL);
 
