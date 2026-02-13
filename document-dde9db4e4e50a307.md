@@ -16,7 +16,7 @@ Discord VC (音声入力)
   ↓
 VAD (Voice Activity Detection) ← 無音時はスキップ
   ↓
-Deepgram Flux (STT, WebSocket) ← 喋った時間のみ課金
+Deepgram Nova-3 (STT, WebSocket) ← 喋った時間のみ課金
   ↓
 OpenClaw Gateway (HTTP: /v1/chat/completions)
   ↓
@@ -48,9 +48,9 @@ Discord VC (音声出力)
   - `threshold`: 0.0〜1.0（感度調整、デフォルト0.5）
   - 音声検出時のみDeepgramにストリーム送信
 
-### 3. STT: Deepgram Flux
+### 3. STT: Deepgram Nova-3
 - **API:** Deepgram Streaming API (WebSocket)
-- **モデル:** `flux`
+- **モデル:** `nova-3`
 - **特徴:**
   - 低レイテンシ
   - 割り込み検出対応
@@ -198,7 +198,7 @@ const response = await openai.chat.completions.create({
       index: 0,
       message: {
         role: 'assistant',
-        content: 'いい選択！Fluxは低レイテンシで割り込み検出も対応してるよ'
+        content: 'いい選択！Nova-3は低レイテンシで割り込み検出も対応してるよ'
       },
       finish_reason: 'stop'
     }
@@ -288,8 +288,8 @@ async function sendToAgent(userId, userMessage) {
 }
 
 // 使用例
-const response = await sendToAgent('123456789012345678', 'Deepgramでfluxが良さそうかなぁ');
-// → "いい選択！Fluxは低レイテンシで割り込み検出も対応してるよ"
+const response = await sendToAgent('123456789012345678', 'Deepgramでnova-3が良さそうかなぁ');
+// → "いい選択！Nova-3は低レイテンシで割り込み検出も対応してるよ"
 ```
 
 #### ログ記録への統合
@@ -407,10 +407,10 @@ VADが最初の発言を検知 or ボタン押下
 **メッセージ形式:**
 ```
 👤 ユーザー名 (00:15:32)
-Deepgramでfluxが良さそうかなぁ
+Deepgramでnova-3が良さそうかなぁ
 
 🤖 ボット名 (00:15:35)
-いい選択！Fluxは低レイテンシで割り込み検出も対応してるよ
+いい選択！Nova-3は低レイテンシで割り込み検出も対応してるよ
 ```
 
 **通話終了時:**
@@ -503,7 +503,7 @@ discord:
 stt:
   provider: "deepgram"
   apiKey: "${DEEPGRAM_API_KEY}"
-  model: "flux"
+  model: "nova-3"
   language: "ja"  # または "en", "multi"
   
 # VAD設定
@@ -660,7 +660,7 @@ TTS_BASE_URL=http://localhost:10102/v1
 ### Phase 1: 基本実装
 1. Discord Bot作成（VC接続、音声受信）
 2. VAD統合
-3. Deepgram Flux接続（STT）
+3. Deepgram Nova-3接続（STT）
 4. OpenClaw Gateway連携（Chat Completions API）
 5. TTS接続（OpenAI互換）
 6. Discord VC音声送信
@@ -715,7 +715,7 @@ TTS_BASE_URL=http://localhost:10102/v1
 
 ## コスト試算
 
-### Deepgram Flux
+### Deepgram Nova-3
 - **軽い使い方（1日30分）:** $6.93/月（約1,040円）
 - **ヘビーユース（1日2時間）:** $27.72/月（約4,158円）
 - **無料枠:** $200（約29〜7ヶ月分）

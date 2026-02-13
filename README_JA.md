@@ -15,7 +15,7 @@ OpenClawエージェントとリアルタイムで音声会話ができるDiscor
 ### このボットができること
 
 - ✅ Discordのボイスチャンネルに自動接続
-- ✅ Deepgram Fluxを使用したリアルタイム音声認識
+- ✅ Deepgram Nova-3を使用したリアルタイム音声認識
 - ✅ VAD（Voice Activity Detection）による文字起こしコストの削減
 - ✅ Discordチャンネル/スレッドへのタイムスタンプ付き会話ログ記録
 - ✅ 日本語音声認識のサポート
@@ -62,7 +62,7 @@ OpenClawエージェントとリアルタイムで音声会話ができるDiscor
 - **ランタイム**: Node.js 22
 - **言語**: TypeScript
 - **Discord**: discord.js v14, @discordjs/voice
-- **音声認識**: Deepgram SDK（Fluxモデル）
+- **音声認識**: Deepgram SDK（Nova-3モデル）
 - **音声処理**: FFmpeg, Opus, prism-media
 - **暗号化**: libsodium-wrappers
 - **LLM連携**（オプション）: OpenAI SDK → OpenClaw Gateway
@@ -185,7 +185,7 @@ Discord ボイスチャンネル（音声入力）
     ↓
 Voice Activity Detection（VAD）
     ↓
-Deepgram Flux（STT via WebSocket）
+Deepgram Nova-3（STT via WebSocket）
     ↓
 【オプション】OpenClaw Gateway（LLM処理）
     ↓
@@ -198,7 +198,7 @@ Discord スレッド/チャンネル（会話ログ）
 
 ## コスト試算
 
-### Deepgram Flux料金
+### Deepgram Nova-3料金
 - **軽い使い方**（1日30分）: 約$6.93/月（約¥1,040）
 - **ヘビーユース**（1日2時間）: 約$27.72/月（約¥4,158）
 - **無料枠**: $200クレジット（使用量に応じて7〜29ヶ月分）

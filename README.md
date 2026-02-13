@@ -15,7 +15,7 @@ This bot connects to Discord voice channels, transcribes user speech in real-tim
 ### What This Bot Can Do
 
 - ✅ Connect to Discord voice channels automatically
-- ✅ Real-time speech transcription using Deepgram Flux
+- ✅ Real-time speech transcription using Deepgram Nova-3
 - ✅ Voice Activity Detection (VAD) to reduce transcription costs
 - ✅ Conversation logging to Discord channels/threads with timestamps
 - ✅ Japanese language support for transcription
@@ -62,7 +62,7 @@ This bot connects to Discord voice channels, transcribes user speech in real-tim
 - **Runtime**: Node.js 22
 - **Language**: TypeScript
 - **Discord**: discord.js v14, @discordjs/voice
-- **Speech-to-Text**: Deepgram SDK (Flux model)
+- **Speech-to-Text**: Deepgram SDK (Nova-3 model)
 - **Audio Processing**: FFmpeg, Opus, prism-media
 - **Encryption**: libsodium-wrappers
 - **LLM Integration** (optional): OpenAI SDK → OpenClaw Gateway
@@ -185,7 +185,7 @@ Discord Voice Channel (Audio Input)
     ↓
 Voice Activity Detection (VAD)
     ↓
-Deepgram Flux (STT via WebSocket)
+Deepgram Nova-3 (STT via WebSocket)
     ↓
 [Optional] OpenClaw Gateway (LLM Processing)
     ↓
@@ -198,7 +198,7 @@ Discord Thread/Channel (Conversation Logs)
 
 ## Cost Estimation
 
-### Deepgram Flux Pricing
+### Deepgram Nova-3 Pricing
 - **Light usage** (30 min/day): ~$6.93/month (~¥1,040)
 - **Heavy usage** (2 hours/day): ~$27.72/month (~¥4,158)
 - **Free tier**: $200 credit (approximately 7-29 months depending on usage)
