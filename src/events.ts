@@ -1,8 +1,8 @@
 import { TextChannel, ChannelType } from "discord.js";
 import { config } from "./config";
-import { client, setCachedLogChannel, getCachedLogChannel, setActiveThread, getActiveThread } from "./state";
+import { client, setCachedLogChannel, getCachedLogChannel, setActiveThread, getActiveThread, getVoiceConnection } from "./state";
 import { getJapaneseTimestamp } from "./utils";
-import { connectToVoiceChannel } from "./voice";
+import { connectToVoiceChannel, getIsConnecting, disconnectFromVoiceChannel } from "./voice";
 import { cleanupUserState } from "./audio";
 
 /**
@@ -33,8 +33,20 @@ export function registerEventHandlers() {
       console.log(`Message sent to #${channel.name}`);
       console.log("Voice state monitoring started.");
 
-      // ボイスチャンネルに接続
-      await connectToVoiceChannel();
+      // 起動時、ボイスチャンネルに非BOTユーザーがいる場合のみ接続する
+      const voiceChannel = await client.channels.fetch(config.DISCORD_VOICE_CHANNEL_ID);
+      if (voiceChannel && voiceChannel.isVoiceBased()) {
+        const nonBotCount = voiceChannel.members.filter(m => !m.user.bot).size;
+        if (nonBotCount > 0) {
+          console.log(`[Voice] 起動時にボイスチャンネルに${nonBotCount}人のユーザーがいます。接続します。`);
+          await connectToVoiceChannel();
+        } else {
+          console.log("[Voice] 起動時にボイスチャンネルに誰もいないため、ユーザーが参加するまで待機します。");
+        }
+      } else {
+        // フォールバック（チャンネル取得失敗時）
+        await connectToVoiceChannel();
+      }
     } catch (error) {
       console.error("An error occurred during startup:", error);
       process.exitCode = 1;
@@ -135,6 +147,31 @@ export function registerEventHandlers() {
         if (shouldClearThread) {
           setActiveThread(null);
           console.log("Voice channel is now empty (only bots), thread cleared");
+        }
+      }
+
+      // --- Botの自動参加・自動切断ロジック ---
+
+      // 設定されたボイスチャンネルに非BOTユーザーが参加・移動してきた場合、botも参加する
+      if (!member.user.bot && newState.channel && newState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
+        const currentConnection = getVoiceConnection();
+        if (!currentConnection && !getIsConnecting()) {
+          console.log("[Voice] ユーザーが対象ボイスチャンネルに参加したため、botも参加します");
+          connectToVoiceChannel().catch(err =>
+            console.error("[Voice] 自動参加に失敗:", err)
+          );
+        }
+      }
+
+      // 設定されたボイスチャンネルから非BOTユーザーが退出・移動した場合、チャンネルが空になればbotも切断する
+      if (!member.user.bot && oldState.channel && oldState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
+        const remainingNonBotCount = oldState.channel.members.filter(m => !m.user.bot).size;
+        if (remainingNonBotCount === 0) {
+          const currentConnection = getVoiceConnection();
+          if (currentConnection) {
+            console.log("[Voice] ボイスチャンネルが空になったため、botを切断します");
+            disconnectFromVoiceChannel();
+          }
         }
       }
     } catch (error) {
