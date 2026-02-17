@@ -6,9 +6,19 @@ import {
   type DiscordGatewayAdapterCreator,
 } from "@discordjs/voice";
 import { config } from "./config";
-import { client, userStates, getCachedLogChannel, setVoiceConnection, getActiveThread } from "./state";
+import { client, userStates, getCachedLogChannel, setVoiceConnection, getVoiceConnection, getActiveThread } from "./state";
 import { getJapaneseTimestamp, sendToThreadOrChannel } from "./utils";
 import { listenToUser, cleanupUserState } from "./audio";
+
+// ボイスチャンネルへの接続試行中かどうかのフラグ
+let _isConnecting = false;
+
+/**
+ * ボイスチャンネルへの接続試行中かどうかを返す
+ */
+export function getIsConnecting(): boolean {
+  return _isConnecting;
+}
 
 /**
  * 指定されたミリ秒だけ待機
@@ -136,19 +146,43 @@ async function connectToVoiceChannelInternal() {
  * ボイスチャンネルに接続（再試行あり）
  */
 export async function connectToVoiceChannel() {
+  if (_isConnecting) {
+    console.log("[Voice] 既に接続試行中のため、スキップします");
+    return;
+  }
+
+  _isConnecting = true;
   const retryDelay = 5000; // 5秒
   let attempt = 0;
 
-  while (true) {
-    attempt++;
-    try {
-      console.log(`[Voice] Connection attempt ${attempt}`);
-      await connectToVoiceChannelInternal();
-      return; // 接続成功
-    } catch (error) {
-      console.error(`[Voice] Connection attempt ${attempt} failed:`, error);
-      console.log(`[Voice] Retrying in ${retryDelay / 1000} seconds...`);
-      await sleep(retryDelay);
+  try {
+    while (true) {
+      attempt++;
+      try {
+        console.log(`[Voice] Connection attempt ${attempt}`);
+        await connectToVoiceChannelInternal();
+        return; // 接続成功
+      } catch (error) {
+        console.error(`[Voice] Connection attempt ${attempt} failed:`, error);
+        console.log(`[Voice] Retrying in ${retryDelay / 1000} seconds...`);
+        await sleep(retryDelay);
+      }
     }
+  } finally {
+    _isConnecting = false;
   }
+}
+
+/**
+ * ボイスチャンネルから切断する
+ */
+export function disconnectFromVoiceChannel(): void {
+  const connection = getVoiceConnection();
+  if (!connection) {
+    console.log("[Voice] 切断する接続がありません");
+    return;
+  }
+
+  console.log("[Voice] ボイスチャンネルから切断します（チャンネルが空になりました）");
+  connection.destroy();
 }
