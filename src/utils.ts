@@ -379,11 +379,11 @@ export async function sendTranscriptionToChannel(
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
     (async () => {
       try {
-        // LLMに送信する前に効果音を再生
-        const soundPath = path.isAbsolute(config.SOUND_EFFECT_PATH)
-          ? config.SOUND_EFFECT_PATH
-          : path.join(__dirname, "..", config.SOUND_EFFECT_PATH);
-        await playSoundEffect(soundPath);
+        // LLMに送信する前に効果音を再生（STT完了後の送信音）
+        const sttSoundPath = path.isAbsolute(config.STT_SOUND_EFFECT_PATH)
+          ? config.STT_SOUND_EFFECT_PATH
+          : path.join(__dirname, "..", config.STT_SOUND_EFFECT_PATH);
+        await playSoundEffect(sttSoundPath);
 
         const llmResponse = await sendChatCompletionRequest(transcript);
         if (llmResponse) {
@@ -399,8 +399,11 @@ export async function sendTranscriptionToChannel(
             if (audioFilePath) {
               await playTTSAudio(audioFilePath);
               // TTS再生完了後、0.5秒待ってから効果音を再生
+              const ttsSoundPath = path.isAbsolute(config.TTS_SOUND_EFFECT_PATH)
+                ? config.TTS_SOUND_EFFECT_PATH
+                : path.join(__dirname, "..", config.TTS_SOUND_EFFECT_PATH);
               await new Promise((resolve) => setTimeout(resolve, 500));
-              await playSoundEffect(soundPath);
+              await playSoundEffect(ttsSoundPath);
             }
           })().catch((error) => {
             console.error("[TTS] Error in TTS playback:", error);

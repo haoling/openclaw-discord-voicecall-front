@@ -18,7 +18,8 @@ const VOLUME_THRESHOLD = parseInt(process.env.VOLUME_THRESHOLD || "150", 10); //
 const AUDIO_BUFFER_SIZE = 30; // オーディオバッファサイズ（約600ms分、20msフレーム × 30）
 const KEEP_ALIVE_INTERVAL = 5000; // Deepgramキープアライブ送信間隔（5秒）
 const VOICE_STREAM_TIMEOUT = parseInt(process.env.VOICE_STREAM_TIMEOUT || "2000", 10); // 音声ストリームタイムアウト時間。この時間を超えて音声データが来ない場合に強制送信します。チェックはKEEP_ALIVE_INTERVALごとに行われるため、実際の検出には最大でその間隔分の遅延が発生します。（デフォルト: 2000ms）
-const SOUND_EFFECT_PATH = process.env.SOUND_EFFECT_PATH || "assets/sounds/pin1.mp3"; // 効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/pin1.mp3）
+const STT_SOUND_EFFECT_PATH = process.env.STT_SOUND_EFFECT_PATH || "assets/sounds/pin1.mp3"; // STT完了後（LLM送信前）の効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/pin1.mp3）
+const TTS_SOUND_EFFECT_PATH = process.env.TTS_SOUND_EFFECT_PATH || "assets/sounds/can1.mp3"; // TTS再生完了後の効果音ファイルパス（環境変数で設定可能、デフォルト: assets/sounds/can1.mp3）
 const THREAD_AUTO_ARCHIVE_DURATION = 60; // スレッド自動アーカイブ時間（分）
 
 // 環境変数の検証
@@ -79,7 +80,10 @@ console.log(
   `TTS_SPEED: ${TTS_SPEED}`
 );
 console.log(
-  `SOUND_EFFECT_PATH: ${SOUND_EFFECT_PATH}`
+  `STT_SOUND_EFFECT_PATH: ${STT_SOUND_EFFECT_PATH}`
+);
+console.log(
+  `TTS_SOUND_EFFECT_PATH: ${TTS_SOUND_EFFECT_PATH}`
 );
 console.log("====================");
 
@@ -103,6 +107,7 @@ export const config = {
   AUDIO_BUFFER_SIZE,
   KEEP_ALIVE_INTERVAL,
   VOICE_STREAM_TIMEOUT,
-  SOUND_EFFECT_PATH,
+  STT_SOUND_EFFECT_PATH,
+  TTS_SOUND_EFFECT_PATH,
   THREAD_AUTO_ARCHIVE_DURATION,
 } as const;
