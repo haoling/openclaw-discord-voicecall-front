@@ -45,3 +45,14 @@ export function getActiveThread(): ThreadChannel | null {
 export function setActiveThread(thread: ThreadChannel | null): void {
   _activeThread = thread;
 }
+
+// TTS再生中に音声認識を一時停止するフラグ
+let _isRecognitionPaused: boolean = false;
+
+export function isRecognitionPaused(): boolean {
+  return _isRecognitionPaused;
+}
+
+export function setRecognitionPaused(paused: boolean): void {
+  _isRecognitionPaused = paused;
+}
