@@ -398,6 +398,9 @@ export async function sendTranscriptionToChannel(
             const audioFilePath = await callTTSAPI(llmResponse);
             if (audioFilePath) {
               await playTTSAudio(audioFilePath);
+              // TTS再生完了後、0.5秒待ってから効果音を再生
+              await new Promise((resolve) => setTimeout(resolve, 500));
+              await playSoundEffect(soundPath);
             }
           })().catch((error) => {
             console.error("[TTS] Error in TTS playback:", error);
