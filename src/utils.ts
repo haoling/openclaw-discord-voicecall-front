@@ -1,4 +1,4 @@
-import { getCachedLogChannel, getVoiceConnection, getActiveThread, setActiveThread, userStates, setRecognitionPaused } from "./state";
+import { getCachedLogChannel, getVoiceConnection, getActiveThread, setActiveThread, setRecognitionPaused, resetAllUserVoiceStates } from "./state";
 import { config } from "./config";
 import {
   createAudioPlayer,
@@ -382,21 +382,7 @@ export async function sendTranscriptionToChannel(
         // STT送信から TTS再生完了まで音声認識を一時停止
         setRecognitionPaused(true);
         // 全ユーザーの音声認識状態をリセット（進行中の発話を破棄してクリーンな状態にする）
-        for (const userState of userStates.values()) {
-          if (userState.silenceTimer) {
-            clearTimeout(userState.silenceTimer);
-            userState.silenceTimer = null;
-          }
-          if (userState.finalTranscriptTimer) {
-            clearTimeout(userState.finalTranscriptTimer);
-            userState.finalTranscriptTimer = null;
-          }
-          userState.isSpeaking = false;
-          userState.isSendingToDeepgram = false;
-          userState.currentTranscript = "";
-          userState.silenceStartTime = null;
-          userState.audioBuffer = [];
-        }
+        resetAllUserVoiceStates();
         if (config.VERBOSE) {
           console.log("[Recognition] TTS再生中のため音声認識を一時停止しました");
         }
