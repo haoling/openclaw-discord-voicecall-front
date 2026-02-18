@@ -1,4 +1,4 @@
-import { getCachedLogChannel, getVoiceConnection, getActiveThread, setActiveThread } from "./state";
+import { getCachedLogChannel, getVoiceConnection, getActiveThread, setActiveThread, setRecognitionPaused, resetAllUserVoiceStates } from "./state";
 import { config } from "./config";
 import {
   createAudioPlayer,
@@ -379,6 +379,14 @@ export async function sendTranscriptionToChannel(
     // LLMに文字起こし結果を送信して処理（非同期で並行実行）
     (async () => {
       try {
+        // STT送信から TTS再生完了まで音声認識を一時停止
+        setRecognitionPaused(true);
+        // 全ユーザーの音声認識状態をリセット（進行中の発話を破棄してクリーンな状態にする）
+        resetAllUserVoiceStates();
+        if (config.VERBOSE) {
+          console.log("[Recognition] TTS再生中のため音声認識を一時停止しました");
+        }
+
         // LLMに送信する前に効果音を再生（STT完了後の送信音）
         const sttSoundPath = path.isAbsolute(config.STT_SOUND_EFFECT_PATH)
           ? config.STT_SOUND_EFFECT_PATH
@@ -394,16 +402,25 @@ export async function sendTranscriptionToChannel(
           await sendToThreadOrChannel(llmMessage);
 
           // TTS音声再生は非同期で実行（待機しない）
+          // TTS完了後（または失敗後）に音声認識を再開する
           (async () => {
-            const audioFilePath = await callTTSAPI(llmResponse);
-            if (audioFilePath) {
-              await playTTSAudio(audioFilePath);
-              // TTS再生完了後、0.5秒待ってから効果音を再生
-              const ttsSoundPath = path.isAbsolute(config.TTS_SOUND_EFFECT_PATH)
-                ? config.TTS_SOUND_EFFECT_PATH
-                : path.join(__dirname, "..", config.TTS_SOUND_EFFECT_PATH);
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              await playSoundEffect(ttsSoundPath);
+            try {
+              const audioFilePath = await callTTSAPI(llmResponse);
+              if (audioFilePath) {
+                await playTTSAudio(audioFilePath);
+                // TTS再生完了後、0.5秒待ってから効果音を再生
+                const ttsSoundPath = path.isAbsolute(config.TTS_SOUND_EFFECT_PATH)
+                  ? config.TTS_SOUND_EFFECT_PATH
+                  : path.join(__dirname, "..", config.TTS_SOUND_EFFECT_PATH);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                await playSoundEffect(ttsSoundPath);
+              }
+            } finally {
+              // TTS再生完了（またはスキップ・エラー）後に音声認識を再開
+              setRecognitionPaused(false);
+              if (config.VERBOSE) {
+                console.log("[Recognition] TTS再生完了後、音声認識を再開しました");
+              }
             }
           })().catch((error) => {
             console.error("[TTS] Error in TTS playback:", error);
@@ -412,8 +429,16 @@ export async function sendTranscriptionToChannel(
           if (config.VERBOSE) {
             console.log(`[LLM] Response sent to channel for: ${transcript}`);
           }
+        } else {
+          // LLM応答がない場合（またはLLM未設定の場合）は即座に音声認識を再開
+          setRecognitionPaused(false);
+          if (config.VERBOSE) {
+            console.log("[Recognition] LLM応答なし、音声認識を再開しました");
+          }
         }
       } catch (error) {
+        // エラー発生時も必ず音声認識を再開
+        setRecognitionPaused(false);
         console.error("[LLM] Error processing and sending LLM response:", error);
         // ログチャンネルにエラーを通知
         try {

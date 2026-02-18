@@ -1,6 +1,6 @@
 import * as prism from "prism-media";
 import { config } from "./config";
-import { userStates } from "./state";
+import { userStates, isRecognitionPaused } from "./state";
 import type { UserTranscriptionState } from "./types";
 import { sendTranscriptionToChannel } from "./utils";
 import { createDeepgramStream } from "./deepgram";
@@ -93,7 +93,7 @@ export function listenToUser(userId: string, username: string, audioStream: impo
       sendKeepAliveIfNeeded(currentState, username);
 
       // 音声ストリームタイムアウトチェック（Discord VADで音声が止まった場合の対策）
-      if (currentState.isSendingToDeepgram) {
+      if (currentState.isSendingToDeepgram && !isRecognitionPaused()) {
         const timeSinceLastAudioData = Date.now() - currentState.lastAudioDataTime;
 
         if (timeSinceLastAudioData > config.VOICE_STREAM_TIMEOUT) {
@@ -140,6 +140,11 @@ export function listenToUser(userId: string, username: string, audioStream: impo
   const handleOpusData = (pcmData: Buffer) => {
     // 音声データ受信時刻を更新
     state.lastAudioDataTime = Date.now();
+
+    // TTS再生中は音声認識をスキップ（ボットの音声を誤認識しないため）
+    if (isRecognitionPaused()) {
+      return;
+    }
     opusDecoderDataCount++;
 
     if (!firstDataReceived) {

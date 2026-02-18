@@ -45,3 +45,36 @@ export function getActiveThread(): ThreadChannel | null {
 export function setActiveThread(thread: ThreadChannel | null): void {
   _activeThread = thread;
 }
+
+// TTS再生中に音声認識を一時停止するフラグ
+let _isRecognitionPaused: boolean = false;
+
+export function isRecognitionPaused(): boolean {
+  return _isRecognitionPaused;
+}
+
+export function setRecognitionPaused(paused: boolean): void {
+  _isRecognitionPaused = paused;
+}
+
+/**
+ * 全ユーザーの音声認識状態をリセット
+ * TTS再生開始時など、進行中の発話を破棄してクリーンな状態にする際に使用
+ */
+export function resetAllUserVoiceStates(): void {
+  for (const userState of userStates.values()) {
+    if (userState.silenceTimer) {
+      clearTimeout(userState.silenceTimer);
+      userState.silenceTimer = null;
+    }
+    if (userState.finalTranscriptTimer) {
+      clearTimeout(userState.finalTranscriptTimer);
+      userState.finalTranscriptTimer = null;
+    }
+    userState.isSpeaking = false;
+    userState.isSendingToDeepgram = false;
+    userState.currentTranscript = "";
+    userState.silenceStartTime = null;
+    userState.audioBuffer = [];
+  }
+}
