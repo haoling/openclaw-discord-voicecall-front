@@ -54,7 +54,7 @@ export function registerEventHandlers() {
   });
 
   // ボイスチャンネルの入退室を監視
-  client.on("voiceStateUpdate", async (oldState, newState) => {
+  client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
     try {
       // キャッシュされたログチャンネルを使用（毎回フェッチしない）
       const cachedLogChannel = getCachedLogChannel();
