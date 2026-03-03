@@ -1,4 +1,4 @@
-import { TextChannel, ChannelType } from "discord.js";
+import { TextChannel, ChannelType, Events } from "discord.js";
 import { config } from "./config";
 import { client, setCachedLogChannel, getCachedLogChannel, setActiveThread, getActiveThread, getVoiceConnection } from "./state";
 import { getJapaneseTimestamp } from "./utils";
@@ -9,7 +9,7 @@ import { cleanupUserState } from "./audio";
  * Discordイベントハンドラを登録
  */
 export function registerEventHandlers() {
-  client.once("ready", async () => {
+  client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user?.tag}`);
 
     try {
@@ -54,7 +54,7 @@ export function registerEventHandlers() {
   });
 
   // ボイスチャンネルの入退室を監視
-  client.on("voiceStateUpdate", async (oldState, newState) => {
+  client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
     try {
       // キャッシュされたログチャンネルを使用（毎回フェッチしない）
       const cachedLogChannel = getCachedLogChannel();
