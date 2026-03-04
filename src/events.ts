@@ -66,6 +66,34 @@ export function registerEventHandlers() {
       const member = newState.member || oldState.member;
       if (!member) return;
 
+      // --- Botの自動参加・自動切断ロジック（awaitより前に実行） ---
+      // connectToVoiceChannel() は _isConnecting フラグを同期的に設定するため、
+      // 最初の await より前に呼び出すことで、複数のVoiceStateUpdateイベントによる
+      // 二重接続の競合状態を防ぐ
+      if (!member.user.bot && newState.channel && newState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
+        const currentConnection = getVoiceConnection();
+        if (!currentConnection && !getIsConnecting()) {
+          console.log("[Voice] ユーザーが対象ボイスチャンネルに参加したため、botも参加します");
+          connectToVoiceChannel().catch(err =>
+            console.error("[Voice] 自動参加に失敗:", err)
+          );
+        }
+      }
+
+      // 設定されたボイスチャンネルから非BOTユーザーが退出・移動した場合、チャンネルが空になればbotも切断する
+      if (!member.user.bot && oldState.channel && oldState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
+        const remainingNonBotCount = oldState.channel.members.filter(m => !m.user.bot).size;
+        if (remainingNonBotCount === 0) {
+          const currentConnection = getVoiceConnection();
+          if (currentConnection) {
+            console.log("[Voice] ボイスチャンネルが空になったため、botを切断します");
+            disconnectFromVoiceChannel();
+          }
+        }
+      }
+
+      // --- 以下は非同期ロギング処理 ---
+
       const timestamp = getJapaneseTimestamp();
 
       // イベントタイプに基づいてメッセージ内容を決定
@@ -147,31 +175,6 @@ export function registerEventHandlers() {
         if (shouldClearThread) {
           setActiveThread(null);
           console.log("Voice channel is now empty (only bots), thread cleared");
-        }
-      }
-
-      // --- Botの自動参加・自動切断ロジック ---
-
-      // 設定されたボイスチャンネルに非BOTユーザーが参加・移動してきた場合、botも参加する
-      if (!member.user.bot && newState.channel && newState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
-        const currentConnection = getVoiceConnection();
-        if (!currentConnection && !getIsConnecting()) {
-          console.log("[Voice] ユーザーが対象ボイスチャンネルに参加したため、botも参加します");
-          connectToVoiceChannel().catch(err =>
-            console.error("[Voice] 自動参加に失敗:", err)
-          );
-        }
-      }
-
-      // 設定されたボイスチャンネルから非BOTユーザーが退出・移動した場合、チャンネルが空になればbotも切断する
-      if (!member.user.bot && oldState.channel && oldState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
-        const remainingNonBotCount = oldState.channel.members.filter(m => !m.user.bot).size;
-        if (remainingNonBotCount === 0) {
-          const currentConnection = getVoiceConnection();
-          if (currentConnection) {
-            console.log("[Voice] ボイスチャンネルが空になったため、botを切断します");
-            disconnectFromVoiceChannel();
-          }
         }
       }
     } catch (error) {
