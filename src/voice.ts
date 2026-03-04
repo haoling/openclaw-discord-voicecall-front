@@ -46,6 +46,10 @@ async function connectToVoiceChannelInternal() {
     selfMute: true,
   });
 
+  // joinVoiceChannel() 直後に登録することで、接続試行中も getVoiceConnection() が非nullを返し、
+  // 重複接続試行を防ぐ（Destroyed イベントで null にリセットされる）
+  setVoiceConnection(connection);
+
   // 接続前からすべての状態遷移を追跡
   connection.on("stateChange", (oldState, newState) => {
     console.log(`[Voice] State: ${oldState.status} → ${newState.status}`);
@@ -64,6 +68,7 @@ async function connectToVoiceChannelInternal() {
   } catch (error) {
     // タイムアウトまたはエラー発生時は古い接続を破棄する
     // （破棄しないと次のリトライで @discordjs/voice が同じ停滞した接続を再利用してしまう）
+    // Destroyed イベントハンドラが setVoiceConnection(null) を呼ぶ
     const currentStatus = connection.state.status;
     console.log(`[Voice] 接続失敗 (状態: ${currentStatus})、停滞した接続を破棄します`);
     if (currentStatus !== VoiceConnectionStatus.Destroyed) {
@@ -72,8 +77,6 @@ async function connectToVoiceChannelInternal() {
     throw error;
   }
   console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
-
-  setVoiceConnection(connection);
 
   if (config.VERBOSE) {
     connection.on("stateChange", (oldState, newState) => {
