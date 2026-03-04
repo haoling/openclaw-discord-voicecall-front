@@ -3,7 +3,6 @@ import {
   EndBehaviorType,
   VoiceConnectionStatus,
   entersState,
-  type DiscordGatewayAdapterCreator,
 } from "@discordjs/voice";
 import { config } from "./config";
 import { client, userStates, getCachedLogChannel, setVoiceConnection, getVoiceConnection, getActiveThread } from "./state";
@@ -12,6 +11,8 @@ import { listenToUser, cleanupUserState } from "./audio";
 
 // ボイスチャンネルへの接続試行中かどうかのフラグ
 let _isConnecting = false;
+// connectToVoiceChannelInternal() の重複実行ガード
+let _internalActive = false;
 
 /**
  * ボイスチャンネルへの接続試行中かどうかを返す
@@ -31,6 +32,14 @@ async function sleep(ms: number) {
  * ボイスチャンネルに接続（再試行なし）
  */
 async function connectToVoiceChannelInternal() {
+  // 二重実行ガード（_isConnecting が何らかの理由でバイパスされた場合のフォールバック）
+  if (_internalActive) {
+    console.log("[Voice] connectToVoiceChannelInternal: 重複呼び出しをスキップ (_internalActive=true)");
+    return;
+  }
+  _internalActive = true;
+
+  try {
   console.log(`[Voice] Fetching voice channel: ${config.DISCORD_VOICE_CHANNEL_ID}`);
   const channel = await client.channels.fetch(config.DISCORD_VOICE_CHANNEL_ID);
   if (!channel || !channel.isVoiceBased()) {
@@ -38,12 +47,30 @@ async function connectToVoiceChannelInternal() {
   }
 
   console.log(`[Voice] Joining voice channel: ${channel.name}`);
+
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
-    adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
+    adapterCreator: channel.guild.voiceAdapterCreator,
     selfDeaf: false,
     selfMute: true,
+  });
+
+  // joinVoiceChannel() 直後に登録することで、接続試行中も getVoiceConnection() が非nullを返し、
+  // 重複接続試行を防ぐ（Destroyed イベントで null にリセットされる）
+  setVoiceConnection(connection);
+
+  // 既存のリスナーを削除してから登録（joinVoiceChannel()が既存の接続を返した場合の重複リスナーを防ぐ）
+  connection.removeAllListeners("stateChange");
+  // 接続前からすべての状態遷移を追跡
+  connection.on("stateChange", (oldState, newState) => {
+    console.log(`[Voice] State: ${oldState.status} → ${newState.status}`);
+    if (config.VERBOSE) {
+      console.log(`[VERBOSE] Voice connection state details:`, {
+        old: oldState,
+        new: newState,
+      });
+    }
   });
 
   console.log(
@@ -53,30 +80,29 @@ async function connectToVoiceChannelInternal() {
     `[Voice] Current state: ${connection.state.status}`
   );
 
-  // 接続が確立されるまで待機（タイムアウトを60秒に延長）
-  await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
-  console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
-
-  setVoiceConnection(connection);
-
-  // 接続状態の変化をログ出力
-  connection.on("stateChange", (oldState, newState) => {
-    console.log(
-      `[Voice] State change: ${oldState.status} -> ${newState.status}`
-    );
-    if (config.VERBOSE) {
-      console.log(`[VERBOSE] Voice connection state details:`, {
-        old: oldState,
-        new: newState,
-      });
+  try {
+    // 接続が確立されるまで待機
+    await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
+  } catch (error) {
+    // タイムアウトまたはエラー発生時は古い接続を破棄する
+    // （破棄しないと次のリトライで @discordjs/voice が同じ停滞した接続を再利用してしまう）
+    // Destroyed イベントハンドラが setVoiceConnection(null) を呼ぶ
+    const currentStatus = connection.state.status;
+    console.log(`[Voice] 接続失敗 (状態: ${currentStatus})、停滞した接続を破棄します`);
+    if (currentStatus !== VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
     }
-  });
+    throw error;
+  }
+  console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
 
   // 音声受信を開始
   const receiver = connection.receiver;
 
   console.log(`[Voice] Voice receiver initialized, waiting for users to speak...`);
 
+  // 重複リスナーを防ぐため既存リスナーを削除してから登録
+  receiver.speaking.removeAllListeners("start");
   receiver.speaking.on("start", (userId) => {
     console.log(`[Voice] Speaking event detected for user ID: ${userId}`);
 
@@ -109,6 +135,10 @@ async function connectToVoiceChannelInternal() {
     }
   });
 
+  // 重複リスナーを防ぐため既存リスナーを削除してから登録
+  connection.removeAllListeners(VoiceConnectionStatus.Disconnected);
+  connection.removeAllListeners(VoiceConnectionStatus.Destroyed);
+
   // 接続エラーハンドリング
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     console.log("[Voice] Disconnected from voice channel");
@@ -140,6 +170,9 @@ async function connectToVoiceChannelInternal() {
   await sendToThreadOrChannel(
     `🎙️ ボイスチャンネル接続 — ${getJapaneseTimestamp()}\nボットがボイスチャンネルに接続し、音声認識を開始しました。`
   );
+  } finally {
+    _internalActive = false;
+  }
 }
 
 /**
@@ -159,7 +192,7 @@ export async function connectToVoiceChannel() {
     while (true) {
       attempt++;
       try {
-        console.log(`[Voice] Connection attempt ${attempt}`);
+        console.log(`[Voice] Connection attempt ${attempt} (pid: ${process.pid})`);
         await connectToVoiceChannelInternal();
         return; // 接続成功
       } catch (error) {
