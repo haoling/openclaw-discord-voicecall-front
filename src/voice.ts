@@ -54,13 +54,16 @@ async function connectToVoiceChannelInternal() {
   );
 
   try {
-    // 接続が確立されるまで待機（タイムアウトを60秒に延長）
-    await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
+    // 接続が確立されるまで待機
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
   } catch (error) {
     // タイムアウトまたはエラー発生時は古い接続を破棄する
     // （破棄しないと次のリトライで @discordjs/voice が同じ停滞した接続を再利用してしまう）
-    console.log(`[Voice] 接続失敗のため停滞した接続を破棄します`);
-    connection.destroy();
+    const currentStatus = connection.state.status;
+    console.log(`[Voice] 接続失敗 (状態: ${currentStatus})、停滞した接続を破棄します`);
+    if (currentStatus !== VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
+    }
     throw error;
   }
   console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
@@ -167,7 +170,7 @@ export async function connectToVoiceChannel() {
     while (true) {
       attempt++;
       try {
-        console.log(`[Voice] Connection attempt ${attempt}`);
+        console.log(`[Voice] Connection attempt ${attempt} (pid: ${process.pid})`);
         await connectToVoiceChannelInternal();
         return; // 接続成功
       } catch (error) {
