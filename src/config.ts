@@ -6,6 +6,7 @@ const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY!;
 const CHAT_COMPLETION_ENDPOINT_URL = process.env.CHAT_COMPLETION_ENDPOINT_URL || "";
 const CHAT_COMPLETION_APIKEY = process.env.CHAT_COMPLETION_APIKEY || "";
 const CHAT_COMPLETION_MODEL = process.env.CHAT_COMPLETION_MODEL || "gpt-4"; // LLMモデル名（環境変数で設定可能、デフォルト: gpt-4）
+const OPENCLAW_AGENT_ID = process.env.OPENCLAW_AGENT_ID || ""; // OpenClawエージェントID（x-openclaw-agent-idヘッダーとして送信）
 const TTS_ENDPOINT_URL = process.env.TTS_ENDPOINT_URL || ""; // TTS APIエンドポイントURL
 const TTS_MODEL = process.env.TTS_MODEL || ""; // TTSモデル名
 const TTS_VOICE = process.env.TTS_VOICE || ""; // TTS音声名
@@ -68,6 +69,9 @@ console.log(
   `CHAT_COMPLETION_MODEL: ${CHAT_COMPLETION_MODEL || "未設定"}`
 );
 console.log(
+  `OPENCLAW_AGENT_ID: ${OPENCLAW_AGENT_ID || "未設定"}`
+);
+console.log(
   `TTS_ENDPOINT_URL: ${TTS_ENDPOINT_URL || "未設定"}`
 );
 console.log(
@@ -95,6 +99,7 @@ export const config = {
   CHAT_COMPLETION_ENDPOINT_URL,
   CHAT_COMPLETION_APIKEY,
   CHAT_COMPLETION_MODEL,
+  OPENCLAW_AGENT_ID,
   TTS_ENDPOINT_URL,
   TTS_MODEL,
   TTS_VOICE,
