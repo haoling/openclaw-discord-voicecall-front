@@ -72,7 +72,9 @@ export function registerEventHandlers() {
       // 二重接続の競合状態を防ぐ
       if (!member.user.bot && newState.channel && newState.channel.id === config.DISCORD_VOICE_CHANNEL_ID) {
         const currentConnection = getVoiceConnection();
-        if (!currentConnection && !getIsConnecting()) {
+        const isConnecting = getIsConnecting();
+        console.log(`[Voice] 自動参加チェック: connection=${!!currentConnection}, isConnecting=${isConnecting}`);
+        if (!currentConnection && !isConnecting) {
           console.log("[Voice] ユーザーが対象ボイスチャンネルに参加したため、botも参加します");
           connectToVoiceChannel().catch(err =>
             console.error("[Voice] 自動参加に失敗:", err)

@@ -11,6 +11,8 @@ import { listenToUser, cleanupUserState } from "./audio";
 
 // ボイスチャンネルへの接続試行中かどうかのフラグ
 let _isConnecting = false;
+// connectToVoiceChannelInternal() の重複実行ガード
+let _internalActive = false;
 
 /**
  * ボイスチャンネルへの接続試行中かどうかを返す
@@ -30,6 +32,14 @@ async function sleep(ms: number) {
  * ボイスチャンネルに接続（再試行なし）
  */
 async function connectToVoiceChannelInternal() {
+  // 二重実行ガード（_isConnecting が何らかの理由でバイパスされた場合のフォールバック）
+  if (_internalActive) {
+    console.log("[Voice] connectToVoiceChannelInternal: 重複呼び出しをスキップ (_internalActive=true)");
+    return;
+  }
+  _internalActive = true;
+
+  try {
   console.log(`[Voice] Fetching voice channel: ${config.DISCORD_VOICE_CHANNEL_ID}`);
   const channel = await client.channels.fetch(config.DISCORD_VOICE_CHANNEL_ID);
   if (!channel || !channel.isVoiceBased()) {
@@ -94,6 +104,8 @@ async function connectToVoiceChannelInternal() {
 
   console.log(`[Voice] Voice receiver initialized, waiting for users to speak...`);
 
+  // 重複リスナーを防ぐため既存リスナーを削除してから登録
+  receiver.speaking.removeAllListeners("start");
   receiver.speaking.on("start", (userId) => {
     console.log(`[Voice] Speaking event detected for user ID: ${userId}`);
 
@@ -126,6 +138,10 @@ async function connectToVoiceChannelInternal() {
     }
   });
 
+  // 重複リスナーを防ぐため既存リスナーを削除してから登録
+  connection.removeAllListeners(VoiceConnectionStatus.Disconnected);
+  connection.removeAllListeners(VoiceConnectionStatus.Destroyed);
+
   // 接続エラーハンドリング
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     console.log("[Voice] Disconnected from voice channel");
@@ -157,6 +173,9 @@ async function connectToVoiceChannelInternal() {
   await sendToThreadOrChannel(
     `🎙️ ボイスチャンネル接続 — ${getJapaneseTimestamp()}\nボットがボイスチャンネルに接続し、音声認識を開始しました。`
   );
+  } finally {
+    _internalActive = false;
+  }
 }
 
 /**
