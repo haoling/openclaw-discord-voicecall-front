@@ -53,8 +53,16 @@ async function connectToVoiceChannelInternal() {
     `[Voice] Current state: ${connection.state.status}`
   );
 
-  // 接続が確立されるまで待機（タイムアウトを60秒に延長）
-  await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
+  try {
+    // 接続が確立されるまで待機（タイムアウトを60秒に延長）
+    await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
+  } catch (error) {
+    // タイムアウトまたはエラー発生時は古い接続を破棄する
+    // （破棄しないと次のリトライで @discordjs/voice が同じ停滞した接続を再利用してしまう）
+    console.log(`[Voice] 接続失敗のため停滞した接続を破棄します`);
+    connection.destroy();
+    throw error;
+  }
   console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
 
   setVoiceConnection(connection);
