@@ -50,13 +50,15 @@ async function connectToVoiceChannelInternal() {
   // 重複接続試行を防ぐ（Destroyed イベントで null にリセットされる）
   setVoiceConnection(connection);
 
+  // 既存のリスナーを削除してから登録（joinVoiceChannel()が既存の接続を返した場合の重複リスナーを防ぐ）
+  connection.removeAllListeners("stateChange");
   // 接続前からすべての状態遷移を追跡
   connection.on("stateChange", (oldState, newState) => {
     console.log(`[Voice] State: ${oldState.status} → ${newState.status}`);
   });
 
   console.log(
-    `[Voice] Waiting for connection to be ready (timeout: 30s)...`
+    `[Voice] Waiting for connection to be ready (timeout: 60s)...`
   );
   console.log(
     `[Voice] Current state: ${connection.state.status}`
@@ -64,7 +66,7 @@ async function connectToVoiceChannelInternal() {
 
   try {
     // 接続が確立されるまで待機
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+    await entersState(connection, VoiceConnectionStatus.Ready, 60_000);
   } catch (error) {
     // タイムアウトまたはエラー発生時は古い接続を破棄する
     // （破棄しないと次のリトライで @discordjs/voice が同じ停滞した接続を再利用してしまう）
