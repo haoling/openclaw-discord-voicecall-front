@@ -38,16 +38,48 @@ async function connectToVoiceChannelInternal() {
   }
 
   console.log(`[Voice] Joining voice channel: ${channel.name}`);
+
+  // アダプターをラップしてイベントの疎通を診断する
+  const originalAdapterCreator = channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const diagnosticAdapterCreator: DiscordGatewayAdapterCreator = (methods: any) => {
+    const wrappedMethods = {
+      onVoiceServerUpdate: (data: Parameters<typeof methods.onVoiceServerUpdate>[0]) => {
+        console.log("[Voice Diag] VOICE_SERVER_UPDATE received → forwarding to @discordjs/voice");
+        return methods.onVoiceServerUpdate(data);
+      },
+      onVoiceStateUpdate: (data: Parameters<typeof methods.onVoiceStateUpdate>[0]) => {
+        console.log("[Voice Diag] VOICE_STATE_UPDATE received → forwarding to @discordjs/voice");
+        return methods.onVoiceStateUpdate(data);
+      },
+      destroy: () => methods.destroy(),
+    };
+    const adapter = originalAdapterCreator(wrappedMethods);
+    return {
+      sendPayload: (data: Parameters<typeof adapter.sendPayload>[0]) => {
+        const result = adapter.sendPayload(data);
+        console.log(`[Voice Diag] sendPayload result: ${result}`);
+        return result;
+      },
+      destroy: () => adapter.destroy(),
+    };
+  };
+
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
-    adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
+    adapterCreator: diagnosticAdapterCreator,
     selfDeaf: false,
     selfMute: true,
   });
 
+  // 接続前からすべての状態遷移を追跡
+  connection.on("stateChange", (oldState, newState) => {
+    console.log(`[Voice] State: ${oldState.status} → ${newState.status}`);
+  });
+
   console.log(
-    `[Voice] Waiting for connection to be ready (timeout: 60s)...`
+    `[Voice] Waiting for connection to be ready (timeout: 30s)...`
   );
   console.log(
     `[Voice] Current state: ${connection.state.status}`
@@ -70,18 +102,14 @@ async function connectToVoiceChannelInternal() {
 
   setVoiceConnection(connection);
 
-  // 接続状態の変化をログ出力
-  connection.on("stateChange", (oldState, newState) => {
-    console.log(
-      `[Voice] State change: ${oldState.status} -> ${newState.status}`
-    );
-    if (config.VERBOSE) {
+  if (config.VERBOSE) {
+    connection.on("stateChange", (oldState, newState) => {
       console.log(`[VERBOSE] Voice connection state details:`, {
         old: oldState,
         new: newState,
       });
-    }
-  });
+    });
+  }
 
   // 音声受信を開始
   const receiver = connection.receiver;
