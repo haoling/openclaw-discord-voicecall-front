@@ -65,6 +65,12 @@ async function connectToVoiceChannelInternal() {
   // 接続前からすべての状態遷移を追跡
   connection.on("stateChange", (oldState, newState) => {
     console.log(`[Voice] State: ${oldState.status} → ${newState.status}`);
+    if (config.VERBOSE) {
+      console.log(`[VERBOSE] Voice connection state details:`, {
+        old: oldState,
+        new: newState,
+      });
+    }
   });
 
   console.log(
@@ -89,15 +95,6 @@ async function connectToVoiceChannelInternal() {
     throw error;
   }
   console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
-
-  if (config.VERBOSE) {
-    connection.on("stateChange", (oldState, newState) => {
-      console.log(`[VERBOSE] Voice connection state details:`, {
-        old: oldState,
-        new: newState,
-      });
-    });
-  }
 
   // 音声受信を開始
   const receiver = connection.receiver;
