@@ -310,6 +310,7 @@ async function sendChatCompletionRequest(
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.CHAT_COMPLETION_APIKEY}`,
         "x-openclaw-session-key": sessionKey,
+        ...(config.OPENCLAW_AGENT_ID && { "x-openclaw-agent-id": config.OPENCLAW_AGENT_ID }),
       },
       body: JSON.stringify({
         model: config.CHAT_COMPLETION_MODEL,
