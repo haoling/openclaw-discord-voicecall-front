@@ -3,7 +3,6 @@ import {
   EndBehaviorType,
   VoiceConnectionStatus,
   entersState,
-  type DiscordGatewayAdapterCreator,
 } from "@discordjs/voice";
 import { config } from "./config";
 import { client, userStates, getCachedLogChannel, setVoiceConnection, getVoiceConnection, getActiveThread } from "./state";
@@ -39,36 +38,10 @@ async function connectToVoiceChannelInternal() {
 
   console.log(`[Voice] Joining voice channel: ${channel.name}`);
 
-  // アダプターをラップしてイベントの疎通を診断する
-  const originalAdapterCreator = channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const diagnosticAdapterCreator: DiscordGatewayAdapterCreator = (methods: any) => {
-    const wrappedMethods = {
-      onVoiceServerUpdate: (data: Parameters<typeof methods.onVoiceServerUpdate>[0]) => {
-        console.log("[Voice Diag] VOICE_SERVER_UPDATE received → forwarding to @discordjs/voice");
-        return methods.onVoiceServerUpdate(data);
-      },
-      onVoiceStateUpdate: (data: Parameters<typeof methods.onVoiceStateUpdate>[0]) => {
-        console.log("[Voice Diag] VOICE_STATE_UPDATE received → forwarding to @discordjs/voice");
-        return methods.onVoiceStateUpdate(data);
-      },
-      destroy: () => methods.destroy(),
-    };
-    const adapter = originalAdapterCreator(wrappedMethods);
-    return {
-      sendPayload: (data: Parameters<typeof adapter.sendPayload>[0]) => {
-        const result = adapter.sendPayload(data);
-        console.log(`[Voice Diag] sendPayload result: ${result}`);
-        return result;
-      },
-      destroy: () => adapter.destroy(),
-    };
-  };
-
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
-    adapterCreator: diagnosticAdapterCreator,
+    adapterCreator: channel.guild.voiceAdapterCreator,
     selfDeaf: false,
     selfMute: true,
   });
