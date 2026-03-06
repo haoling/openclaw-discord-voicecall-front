@@ -368,6 +368,38 @@ async function sendChatCompletionRequest(
 }
 
 /**
+ * ウェルカムメッセージをTTSでボイスチャンネルに再生する
+ * LLMへは送信せず、固定文言をそのままTTSエンジンに渡す
+ */
+export async function playWelcomeMessage(): Promise<void> {
+  if (!config.WELCOME_MESSAGE) {
+    return;
+  }
+
+  // TTS設定が不完全な場合は事前にチェックしてスキップ
+  if (!config.TTS_ENDPOINT_URL || !config.TTS_MODEL || !config.TTS_VOICE) {
+    console.log("[Welcome] TTS設定（TTS_ENDPOINT_URL / TTS_MODEL / TTS_VOICE）が未設定のため、ウェルカムメッセージをスキップしました");
+    return;
+  }
+
+  console.log(`[Welcome] ウェルカムメッセージを再生します: "${config.WELCOME_MESSAGE}"`);
+
+  const audioFilePath = await callTTSAPI(config.WELCOME_MESSAGE);
+  if (audioFilePath) {
+    await playTTSAudio(audioFilePath);
+    // TTS再生完了後、0.5秒待ってから効果音を再生
+    const ttsSoundPath = path.isAbsolute(config.TTS_SOUND_EFFECT_PATH)
+      ? config.TTS_SOUND_EFFECT_PATH
+      : path.join(__dirname, "..", config.TTS_SOUND_EFFECT_PATH);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await playSoundEffect(ttsSoundPath);
+    console.log("[Welcome] ウェルカムメッセージの再生が完了しました");
+  } else {
+    console.log("[Welcome] TTS APIエラーのため、ウェルカムメッセージの再生に失敗しました");
+  }
+}
+
+/**
  * ボイスログチャンネルに文字起こしを投稿
  */
 export async function sendTranscriptionToChannel(

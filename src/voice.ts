@@ -6,7 +6,7 @@ import {
 } from "@discordjs/voice";
 import { config } from "./config";
 import { client, userStates, getCachedLogChannel, setVoiceConnection, getVoiceConnection, getActiveThread } from "./state";
-import { getJapaneseTimestamp, sendToThreadOrChannel } from "./utils";
+import { getJapaneseTimestamp, sendToThreadOrChannel, playWelcomeMessage } from "./utils";
 import { listenToUser, cleanupUserState } from "./audio";
 
 // ボイスチャンネルへの接続試行中かどうかのフラグ
@@ -95,6 +95,9 @@ async function connectToVoiceChannelInternal() {
     throw error;
   }
   console.log(`[Voice] ✓ Connected to voice channel: ${channel.name}`);
+
+  // ウェルカムメッセージをTTSで再生（文字起こし開始前）
+  await playWelcomeMessage();
 
   // 音声受信を開始
   const receiver = connection.receiver;
