@@ -12,6 +12,7 @@ const TTS_ENDPOINT_URL = process.env.TTS_ENDPOINT_URL || ""; // TTS APIエンド
 const TTS_MODEL = process.env.TTS_MODEL || ""; // TTSモデル名
 const TTS_VOICE = process.env.TTS_VOICE || ""; // TTS音声名
 const TTS_SPEED = parseFloat(process.env.TTS_SPEED || "1.0"); // TTS速度（デフォルト: 1.0）
+const WELCOME_MESSAGE = process.env.WELCOME_MESSAGE || ""; // ボイスチャンネル接続時に再生するウェルカムメッセージ（環境変数で設定可能、デフォルト: なし）
 const VERBOSE = process.env.VERBOSE === "true";
 const ENABLE_DEEPGRAM_VAD = process.env.ENABLE_DEEPGRAM_VAD !== "false"; // デフォルトはtrue
 const ENABLE_LOCAL_VAD = process.env.ENABLE_LOCAL_VAD !== "false"; // デフォルトはtrue
@@ -93,6 +94,9 @@ console.log(
 console.log(
   `TTS_SOUND_EFFECT_PATH: ${TTS_SOUND_EFFECT_PATH}`
 );
+console.log(
+  `WELCOME_MESSAGE: ${WELCOME_MESSAGE ? `"${WELCOME_MESSAGE}"` : "未設定"}`
+);
 console.log("====================");
 
 export const config = {
@@ -120,4 +124,5 @@ export const config = {
   STT_SOUND_EFFECT_PATH,
   TTS_SOUND_EFFECT_PATH,
   THREAD_AUTO_ARCHIVE_DURATION,
+  WELCOME_MESSAGE,
 } as const;

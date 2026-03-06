@@ -368,6 +368,26 @@ async function sendChatCompletionRequest(
 }
 
 /**
+ * ウェルカムメッセージをTTSでボイスチャンネルに再生する
+ * LLMへは送信せず、固定文言をそのままTTSエンジンに渡す
+ */
+export async function playWelcomeMessage(): Promise<void> {
+  if (!config.WELCOME_MESSAGE) {
+    return;
+  }
+
+  console.log(`[Welcome] ウェルカムメッセージを再生します: "${config.WELCOME_MESSAGE}"`);
+
+  const audioFilePath = await callTTSAPI(config.WELCOME_MESSAGE);
+  if (audioFilePath) {
+    await playTTSAudio(audioFilePath);
+    console.log("[Welcome] ウェルカムメッセージの再生が完了しました");
+  } else {
+    console.log("[Welcome] TTS設定が不完全なため、ウェルカムメッセージをスキップしました");
+  }
+}
+
+/**
  * ボイスログチャンネルに文字起こしを投稿
  */
 export async function sendTranscriptionToChannel(
