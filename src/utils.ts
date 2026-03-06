@@ -387,6 +387,12 @@ export async function playWelcomeMessage(): Promise<void> {
   const audioFilePath = await callTTSAPI(config.WELCOME_MESSAGE);
   if (audioFilePath) {
     await playTTSAudio(audioFilePath);
+    // TTS再生完了後、0.5秒待ってから効果音を再生
+    const ttsSoundPath = path.isAbsolute(config.TTS_SOUND_EFFECT_PATH)
+      ? config.TTS_SOUND_EFFECT_PATH
+      : path.join(__dirname, "..", config.TTS_SOUND_EFFECT_PATH);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await playSoundEffect(ttsSoundPath);
     console.log("[Welcome] ウェルカムメッセージの再生が完了しました");
   } else {
     console.log("[Welcome] TTS APIエラーのため、ウェルカムメッセージの再生に失敗しました");
