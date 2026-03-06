@@ -302,7 +302,13 @@ async function sendChatCompletionRequest(
         `[LLM] Sending request with session key: ${sessionKey}`
       );
       console.log(`[LLM] Using model: ${config.CHAT_COMPLETION_MODEL}`);
+      if (config.CHAT_PREFIX) {
+        console.log(`[LLM] Chat prefix applied: "${config.CHAT_PREFIX}"`);
+      }
     }
+
+    // プリフィックスが設定されている場合は先頭に付加する
+    const content = config.CHAT_PREFIX ? `${config.CHAT_PREFIX}${transcript}` : transcript;
 
     const response = await fetch(config.CHAT_COMPLETION_ENDPOINT_URL, {
       method: "POST",
@@ -317,7 +323,7 @@ async function sendChatCompletionRequest(
         messages: [
           {
             role: "user",
-            content: transcript,
+            content,
           },
         ],
       }),
