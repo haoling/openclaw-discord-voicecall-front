@@ -376,6 +376,12 @@ export async function playWelcomeMessage(): Promise<void> {
     return;
   }
 
+  // TTS設定が不完全な場合は事前にチェックしてスキップ
+  if (!config.TTS_ENDPOINT_URL || !config.TTS_MODEL || !config.TTS_VOICE) {
+    console.log("[Welcome] TTS設定（TTS_ENDPOINT_URL / TTS_MODEL / TTS_VOICE）が未設定のため、ウェルカムメッセージをスキップしました");
+    return;
+  }
+
   console.log(`[Welcome] ウェルカムメッセージを再生します: "${config.WELCOME_MESSAGE}"`);
 
   const audioFilePath = await callTTSAPI(config.WELCOME_MESSAGE);
@@ -383,7 +389,7 @@ export async function playWelcomeMessage(): Promise<void> {
     await playTTSAudio(audioFilePath);
     console.log("[Welcome] ウェルカムメッセージの再生が完了しました");
   } else {
-    console.log("[Welcome] TTS設定が不完全なため、ウェルカムメッセージをスキップしました");
+    console.log("[Welcome] TTS APIエラーのため、ウェルカムメッセージの再生に失敗しました");
   }
 }
 
